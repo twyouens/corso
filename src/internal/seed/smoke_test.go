@@ -48,6 +48,17 @@ func TestSeedHarnessIntgSuite(t *testing.T) {
 func (suite *SeedHarnessIntgSuite) TestRun_SeedsTenantAndIsIdempotent() {
 	t := suite.T()
 
+	// Belt-and-braces credential validation (Done-when #7): tester.MustGetEnvSets
+	// (called by NewIntegrationSuite above) checks that each env var *name* is a
+	// non-empty string literal, not that its *value* is set, so it would not
+	// actually catch a missing credential. Check the real thing ourselves and
+	// fail with the same clear, name-only message the seed command itself
+	// reports, so `make test-integration` with one variable unset behaves the
+	// same way `go run ./src/cmd/seed` does.
+	if missing := MissingVars(os.Getenv, RequiredEnvVars); len(missing) > 0 {
+		t.Fatal(MissingVarsError(missing))
+	}
+
 	ctx, flush := tester.NewContext(t)
 	defer flush()
 
