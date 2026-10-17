@@ -55,8 +55,9 @@ For context: the `alcionai/kopia` fork's `master` branch kept merging upstream c
 five more months after Corso pinned `41471159` (tip is `5dbc8a478a7e1ad066f5212672280751f357df52`,
 2024-08-27) and has not moved since. Corso itself was archived shortly after (see
 `corso-analysis.md` and the repository's own "archival notice" commits). As of this audit (run
-against upstream `kopia/kopia` HEAD `01938f966dc379a74de8b5ba9fc96c2048f64232`, tagged
-`v0.23.1`, 2026-10-15), the fork's base is **1,154 commits and roughly 2.75 years** behind
+against upstream `kopia/kopia` HEAD `01938f966dc379a74de8b5ba9fc96c2048f64232`, 2026-10-15;
+`git describe --tags HEAD` gives `v0.23.1-168-g01938f96`, i.e. HEAD is 168 commits past the
+latest tagged release, `v0.23.1`), the fork's base is **1,154 commits and roughly 2.75 years** behind
 current upstream.
 
 Unrelated `replace` directive, out of scope for this audit per the brief: `src/go.mod` also
@@ -113,11 +114,16 @@ failures, probably added while debugging a real compaction incident.
 
 ## 3. Fork-only call sites in this repository
 
-Searched every file under `src/` that imports `github.com/kopia/kopia/...` (33 files, not just
-`src/internal/kopia/`), then checked which of those actually touch the fields/behaviour added in
-section 2 rather than stock upstream Kopia API (`repo.*`, `blob.*`, `manifest.ID`,
-`compression.*`, `maintenance.*`, `format.*`, `repo/logging`, etc., all unchanged by the fork and
-still present in upstream `kopia/kopia` today).
+Searched every file under `src/` that imports `github.com/kopia/kopia/...`:
+`grep -rl "kopia/kopia" --include="*.go" src/` returns **40 files**, not just
+`src/internal/kopia/`. Checked each one against the fields/behaviour added in section 2 versus
+stock upstream Kopia API (`repo.*`, `blob.*`, `manifest.ID`, `compression.*`, `maintenance.*`,
+`format.*`, `repo/logging`, `fs`, `snapshot`, etc., all unchanged by the fork and still present
+in upstream `kopia/kopia` today). Cross-checked the result by grepping the whole of `src/`
+(not just these 40 files) for each fork-only field name
+(`RoleARN|AssumeRole|QueryParams|TLSHandshakeTimeout|KOPIA_MANIFEST_AUTOCOMPACT_COUNT|SessionName|RoleDuration`)
+independently of the import grep; that search returns hits in exactly the same two files named
+below, nowhere else.
 
 Only two files actually depend on fork-only behaviour, both via the S3 storage path:
 
@@ -140,21 +146,53 @@ Only two files actually depend on fork-only behaviour, both via the S3 storage p
   constructor that populates `Role`/`SessionName`/`SessionTags`/`QueryParams`. These exist only
   to feed `s3.go`'s fork-only fields through from the public API.
 
-Checked but **not** fork-dependent, despite importing `kopia/kopia`:
+The other 39 of the 40 files checked but **not** fork-dependent, grouped by what they actually
+import from `kopia/kopia` and why none of it touches section 2's three changes:
 
-- `internal/kopia/retention/opts.go` (S3 Object Lock / retention — STO-3's immutability
-  requirement) uses `format.BlobStorageConfiguration`, `blob.Governance`, `blob.Compliance`,
-  `maintenance.Params`, `maintenance.CheckExtendRetention`. All present, unchanged, in current
-  upstream (`repo/maintenance/blob_retain.go`, `repo/format/blobcfg_blob.go`). Retention/object
-  lock is a stock Kopia feature, not an Alcion addition.
-- `internal/kopia/filesystem.go` uses only `filesystem.Options{Path}` — stock upstream.
-  `conn.go`, `upload.go`, `wrapper.go`, `base_finder.go`, `cleanup_backups.go`,
-  `model_store.go`, `backup_bases.go`, `data_collection.go`, `pkg/repository/*`,
-  `pkg/store/*`, `internal/model/model.go`, `pkg/logger/logger.go` use only core, unchanged
-  upstream types (`repo.Repository`, `repo.Initialize`/`Connect`/`Open`/`WriteSession`,
-  `compression.Name`, `manifest.ID`, `repo/logging`). None of them touch the three changes in
-  section 2.
-- `cmd/s3checker/pkg/s3/s3.go` talks to S3 directly through `minio-go` (not through
+- **`internal/kopia/retention/opts.go` + `opts_test.go`** (S3 Object Lock / retention — STO-3's
+  immutability requirement) use `format.BlobStorageConfiguration`, `blob.Governance`,
+  `blob.Compliance`, `maintenance.Params`, `maintenance.CheckExtendRetention`. All present,
+  unchanged, in current upstream (`repo/maintenance/blob_retain.go`,
+  `repo/format/blobcfg_blob.go`). Retention/object lock is a stock Kopia feature, not an Alcion
+  addition.
+- **`internal/kopia/filesystem.go`** uses only `filesystem.Options{Path}` — stock upstream.
+- **The rest of `internal/kopia/`'s non-test, non-mock files** — `conn.go`, `upload.go`,
+  `wrapper.go`, `base_finder.go`, `cleanup_backups.go`, `model_store.go`, `backup_bases.go`,
+  `data_collection.go` — use only core, unchanged upstream types: `repo.Repository`,
+  `repo.Initialize`/`Connect`/`Open`/`WriteSession`/`DirectWriteSession`, `repo.DirectRepository`,
+  `compression.Name`/`compression.ByName`, `content.CachingOptions`, `blob.Storage`,
+  `manifest.ID`, `snapshot`/`snapshot/policy`/`snapshot/snapshotfs`, `fs`. None of these types or
+  functions changed shape between the fork's base and upstream HEAD in a way that introduces a
+  fork-only dependency (API *version* drift chunk 0.4 will hit during the upgrade is a separate
+  concern from fork-only *behaviour*, which is what this section inventories).
+- **`internal/kopia/`'s eleven `*_test.go` files** (`backup_bases_test.go`, `base_finder_test.go`,
+  `cleanup_backups_test.go`, `conn_test.go`, `data_collection_test.go`,
+  `merge_collection_test.go`, `model_store_test.go`, `upload_test.go`, `wrapper_scale_test.go`,
+  `wrapper_test.go`, plus `retention/opts_test.go` already counted above) exercise the same
+  non-fork types as their corresponding non-test files; none construct an `s3.Options` or touch
+  the manifest auto-compaction env var.
+- **`internal/kopia/mock_backup_base.go`** and **`internal/kopia/mockkopia/fs.go`** — mocks used
+  by the tests above. `mock_backup_base.go` imports `repo/manifest` (for `manifest.ID`) and
+  `snapshot`; `mockkopia/fs.go` imports `fs` (Kopia's virtual filesystem interface, for building
+  fake snapshot trees in tests). Both stock upstream, no fork fields.
+- **Inject/control-plane plumbing**: `internal/operations/inject/inject.go` and
+  `pkg/control/repository/repo.go` (the latter only has a `kopia/kopia` *comment*, a link to a
+  Kopia source file for context — no actual import) — both only reference `manifest.ID`-shaped
+  values passed through interfaces; neither builds `s3.Options` or reads the auto-compaction env
+  var.
+- **Catalogue/store plumbing**: `internal/model/model.go`, `pkg/repository/backups.go`,
+  `pkg/repository/debug.go`, `pkg/repository/repository_unexported_test.go`,
+  `pkg/store/backup.go`, `pkg/store/backup_test.go`, `pkg/store/mock/model_store.go`,
+  `pkg/store/mock/wrapper.go` — all use `manifest.ID` as an opaque identifier type (backup-point
+  IDs), nothing else.
+- **M365 service layer**: `internal/m365/service/groups/backup.go` and its `backup_test.go` —
+  import `repo/manifest` for the same `manifest.ID` reason as the catalogue plumbing above; no
+  storage-layer code.
+- **Operations layer**: `internal/operations/backup_test.go` and `internal/operations/manifests_test.go`
+  — import `repo/manifest` and `snapshot` for test fixtures, same stock types.
+- **Logging**: `pkg/logger/logger.go` imports `repo/logging` to adapt Kopia's logger interface
+  to Corso's; unchanged upstream package.
+- **`cmd/s3checker/pkg/s3/s3.go`** talks to S3 directly through `minio-go` (not through
   `kopia/kopia`'s `repo/blob/s3` package at all — the `kopia/kopia` string match in this file is
   only a source-attribution comment pointing at a Kopia source file it was "scavenged" from). Not
   a dependency on the fork.

@@ -6,7 +6,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased] (beta)
-### Docs
+### Added
 - Audited the Alcion Kopia fork pinned in `src/go.mod` against its upstream base; see `docs/kopia-fork-audit.md` for the fork-only dependency inventory and the recommendation to move to current upstream Kopia.
 
 ### Fixed
