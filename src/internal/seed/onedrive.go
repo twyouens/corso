@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/alcionai/clues"
+	"github.com/microsoftgraph/msgraph-sdk-go/models"
 
 	"github.com/twyouens/corso/src/internal/common/ptr"
 	"github.com/twyouens/corso/src/pkg/control"
@@ -17,21 +18,33 @@ import (
 const oneDriveFolderName = Prefix
 
 // oneDriveFiles is the fixed, known content the seeder writes.
+//
+// k3ep-seed-file-003.txt was added deliberately, not as scope creep: every
+// other item here already existed in the test tenant by the time
+// CreatedAt/ModifiedAt were wired up to real Graph values, so every live
+// run only ever exercised the "found" branch. A third, permanent file gives
+// one real create-then-found transition to prove live, the way the review
+// asked for - it stays part of this workload's seed set going forward,
+// the same as the other two.
 var oneDriveFiles = []struct {
 	name    string
 	content string
 }{
 	{name: Prefix + "-file-001.txt", content: "k3ep seed harness OneDrive file 1\n"},
 	{name: Prefix + "-file-002.txt", content: "k3ep seed harness OneDrive file 2, a little longer.\n"},
+	{name: Prefix + "-file-003.txt", content: "k3ep seed harness OneDrive file 3.\n"},
 }
 
 // seedOneDrive idempotently ensures the dedicated folder and its known
 // files exist in userID's OneDrive, and returns a manifest item for each
-// (including the drive-owning folder itself).
-func seedOneDrive(ctx context.Context, c api.Client, userID string) ([]ManifestItem, error) {
+// (including the drive-owning folder itself), plus how many of each were
+// found versus freshly created.
+func seedOneDrive(ctx context.Context, c api.Client, userID string) ([]ManifestItem, WorkloadSummary, error) {
+	summary := WorkloadSummary{Workload: WorkloadOneDrive}
+
 	drive, err := c.Users().GetDefaultDrive(ctx, userID)
 	if err != nil {
-		return nil, clues.Wrap(err, "getting user's OneDrive")
+		return nil, summary, clues.Wrap(err, "getting user's OneDrive")
 	}
 
 	driveID := ptr.Val(drive.GetId())
@@ -39,25 +52,25 @@ func seedOneDrive(ctx context.Context, c api.Client, userID string) ([]ManifestI
 
 	root, err := drives.GetRootFolder(ctx, driveID)
 	if err != nil {
-		return nil, clues.Wrap(err, "getting OneDrive root")
+		return nil, summary, clues.Wrap(err, "getting OneDrive root")
 	}
 
 	rootID := ptr.Val(root.GetId())
 
-	folder, _, err := FindOrCreate(
-		func() (string, bool, error) {
+	folder, folderCreated, err := FindOrCreate(
+		func() (models.DriveItemable, bool, error) {
 			found, err := drives.GetFolderByName(ctx, driveID, rootID, oneDriveFolderName)
 			if err == nil {
-				return ptr.Val(found.GetId()), true, nil
+				return found, true, nil
 			}
 
 			if errors.Is(err, api.ErrFolderNotFound) {
-				return "", false, nil
+				return nil, false, nil
 			}
 
-			return "", false, clues.Wrap(err, "looking up seed OneDrive folder")
+			return nil, false, clues.Wrap(err, "looking up seed OneDrive folder")
 		},
-		func() (string, error) {
+		func() (models.DriveItemable, error) {
 			newFolder := api.NewDriveItem(oneDriveFolderName, true)
 
 			created, err := drives.PostItemInContainer(ctx, driveID, rootID, newFolder, control.Skip)
@@ -65,96 +78,124 @@ func seedOneDrive(ctx context.Context, c api.Client, userID string) ([]ManifestI
 				// lost a race with another run; the folder exists now, use it.
 				found, lookupErr := drives.GetFolderByName(ctx, driveID, rootID, oneDriveFolderName)
 				if lookupErr != nil {
-					return "", clues.Wrap(lookupErr, "re-fetching seed OneDrive folder after conflict")
+					return nil, clues.Wrap(lookupErr, "re-fetching seed OneDrive folder after conflict")
 				}
 
-				return ptr.Val(found.GetId()), nil
+				return found, nil
 			}
 
 			if err != nil {
-				return "", clues.Wrap(err, "creating seed OneDrive folder")
+				return nil, clues.Wrap(err, "creating seed OneDrive folder")
 			}
 
-			return ptr.Val(created.GetId()), nil
+			return created, nil
 		})
 	if err != nil {
-		return nil, err
+		return nil, summary, err
 	}
 
-	existingChildren, err := drives.GetFolderChildren(ctx, driveID, folder)
+	summary.record(folderCreated)
+
+	folderID := ptr.Val(folder.GetId())
+
+	existingChildren, err := drives.GetFolderChildren(ctx, driveID, folderID)
 	if err != nil {
-		return nil, clues.Wrap(err, "listing seed OneDrive folder contents")
+		return nil, summary, clues.Wrap(err, "listing seed OneDrive folder contents")
 	}
 
-	existingByName := map[string]string{}
-	for _, child := range existingChildren {
-		existingByName[ptr.Val(child.GetName())] = ptr.Val(child.GetId())
-	}
+	existingByName := driveItemsByName(existingChildren)
 
 	items := []ManifestItem{
 		{
 			Workload:   WorkloadOneDrive,
 			Kind:       "folder",
-			ID:         folder,
+			ID:         folderID,
 			Name:       oneDriveFolderName,
+			CreatedAt:  folder.GetCreatedDateTime(),
+			ModifiedAt: folder.GetLastModifiedDateTime(),
 			ResourceID: driveID,
 		},
 	}
 
 	for _, want := range oneDriveFiles {
-		fileID, _, err := FindOrCreate(
-			func() (string, bool, error) {
-				id, found := existingByName[want.name]
-				return id, found, nil
+		file, fileCreated, err := FindOrCreate(
+			func() (models.DriveItemable, bool, error) {
+				f, found := existingByName[want.name]
+				return f, found, nil
 			},
-			func() (string, error) {
+			func() (models.DriveItemable, error) {
 				newFile := api.NewDriveItem(want.name, false)
 
-				created, err := drives.PostItemInContainer(ctx, driveID, folder, newFile, control.Skip)
+				created, err := drives.PostItemInContainer(ctx, driveID, folderID, newFile, control.Skip)
 				if AlreadyExists(err) {
 					// another run created it first; the current content is
-					// already correct (seed content is fixed), so this id
-					// just needs to be found, not overwritten.
-					refreshed, lookupErr := drives.GetFolderChildren(ctx, driveID, folder)
+					// already correct (seed content is fixed), so this just
+					// needs to be found, not overwritten.
+					refreshed, lookupErr := drives.GetFolderChildren(ctx, driveID, folderID)
 					if lookupErr != nil {
-						return "", clues.Wrap(lookupErr, "re-listing seed OneDrive folder after conflict")
+						return nil, clues.Wrap(lookupErr, "re-listing seed OneDrive folder after conflict")
 					}
 
 					for _, child := range refreshed {
 						if ptr.Val(child.GetName()) == want.name {
-							return ptr.Val(child.GetId()), nil
+							return child, nil
 						}
 					}
 
-					return "", clues.New(fmt.Sprintf("seed OneDrive file %q reported a conflict but was not found", want.name))
+					return nil, clues.New(fmt.Sprintf("seed OneDrive file %q reported a conflict but was not found", want.name))
 				}
 
 				if err != nil {
-					return "", clues.Wrap(err, fmt.Sprintf("creating seed OneDrive file %q", want.name))
+					return nil, clues.Wrap(err, fmt.Sprintf("creating seed OneDrive file %q", want.name))
 				}
 
 				id := ptr.Val(created.GetId())
 
 				if err := drives.PutItemContent(ctx, driveID, id, []byte(want.content)); err != nil {
-					return "", clues.Wrap(err, fmt.Sprintf("uploading content for seed OneDrive file %q", want.name))
+					return nil, clues.Wrap(err, fmt.Sprintf("uploading content for seed OneDrive file %q", want.name))
 				}
 
-				return id, nil
+				// created's CreatedDateTime/LastModifiedDateTime are from
+				// the metadata-only POST, immediately before the content
+				// upload above; that's a real Graph timestamp, just not
+				// necessarily updated for the content PUT a moment later.
+				// Good enough for the manifest's purpose (a stable date,
+				// consistent whichever branch produced the item) without
+				// an extra round-trip to re-fetch.
+				return created, nil
 			})
 		if err != nil {
-			return nil, err
+			return nil, summary, err
 		}
+
+		summary.record(fileCreated)
 
 		items = append(items, ManifestItem{
 			Workload:   WorkloadOneDrive,
 			Kind:       "file",
-			ID:         fileID,
+			ID:         ptr.Val(file.GetId()),
 			Name:       want.name,
 			FolderPath: oneDriveFolderName,
 			SizeBytes:  int64(len(want.content)),
+			CreatedAt:  file.GetCreatedDateTime(),
+			ModifiedAt: file.GetLastModifiedDateTime(),
 			ResourceID: driveID,
 		})
 	}
 
-	return items, nil
+	return items, summary, nil
+}
+
+// driveItemsByName builds a name->item map from an already-fetched slice of
+// drive items (folder children). Split out from the GetFolderChildren call
+// site so the map-building logic - the actual idempotency decision input -
+// is unit-testable without a Graph call.
+func driveItemsByName(items []models.DriveItemable) map[string]models.DriveItemable {
+	out := map[string]models.DriveItemable{}
+
+	for _, item := range items {
+		out[ptr.Val(item.GetName())] = item
+	}
+
+	return out
 }

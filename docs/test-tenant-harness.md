@@ -68,26 +68,56 @@ workspace's credential loader:
 cd src && GO111MODULE=on GOWORK=off <workspace>/scripts/with-test-tenant.sh go run ./cmd/seed
 ```
 
-This creates (or, on a later run, finds and reuses) in `SEED_USER_ID`'s
+Before writing anything, it resolves and prints `SEED_USER_ID` and
+`SEED_SITE_ID` to their real display name/UPN and site name - so if either
+variable points at the wrong real person or site, that is visible
+immediately, not discovered later:
+
+```
+target user: Jane Doe (jane.doe@contoso.onmicrosoft.com)
+target site: Contoso Team Site (contoso.sharepoint.com,...)
+```
+
+It then creates (or, on a later run, finds and reuses) in `SEED_USER_ID`'s
 mailbox and OneDrive:
 
 - a mail folder `k3ep-seed-mail` with two known messages,
 - a calendar `k3ep-seed-calendar` with one known event,
 - a contacts folder `k3ep-seed-contacts` with one known contact,
-- a OneDrive folder `k3ep-seed` with two known files,
+- a OneDrive folder `k3ep-seed` with three known files,
 
 and in `SEED_SITE_ID`:
 
 - a document library `k3ep-seed-library` with one known file,
 - a list `k3ep-seed-list` with two known items.
 
-Running it again leaves the tenant unchanged: every container and item is
-looked up by its fixed name before anything is created, so a second run
-finds everything the first run made and creates nothing new. This is what
-`src/internal/seed/upsert_test.go` proves directly (without touching the
-tenant) and what `src/internal/seed/smoke_test.go`'s one integration test
-proves by actually running the seeder twice against the real tenant and
-diffing the two manifests.
+After the target lines, it prints one line per workload stating how many
+items it found already present versus how many it had to create - counts
+and workload names only, never an item's name, subject, filename or a
+credential:
+
+```
+exchange-mail: 2 found, 0 created
+exchange-calendar: 1 found, 0 created
+exchange-contacts: 1 found, 0 created
+onedrive: 3 found, 1 created
+sharepoint-library: 2 found, 0 created
+sharepoint-list: 3 found, 0 created
+```
+
+This is deliberate: a human re-running the seeder or `make -C src
+test-integration` themselves can check this output against whatever a
+result report claims, rather than having to trust it.
+
+Running the seeder again leaves the tenant unchanged: every container and
+item is looked up by its fixed name before anything is created, so a
+second run finds everything the first run made and creates nothing new.
+This is what `src/internal/seed/upsert_test.go` proves directly (without
+touching the tenant) and what `src/internal/seed/smoke_test.go`'s one
+integration test proves by actually running the seeder twice against the
+real tenant and diffing the two manifests - including, the first time an
+item is genuinely new, across the create-then-find transition itself, not
+just two runs that both found everything already there.
 
 ## The seed manifest
 
@@ -117,6 +147,8 @@ afterwards. Schema (`src/internal/seed/manifest.go`):
       "name": "k3ep-seed-mail-001",
       "folder_path": "k3ep-seed-mail",
       "size_bytes": 34,
+      "created_at": "2026-01-01T03:58:12Z",
+      "modified_at": "2026-01-01T03:58:12Z",
       "resource_id": "<SEED_USER_ID>"
     }
   ]
@@ -130,6 +162,20 @@ the container name(s) from the root down to (and including) the item's
 immediate parent. `resource_id` is the mailbox, drive or site that owns the
 item (so a OneDrive file's `resource_id` is a drive ID, not `SEED_USER_ID`
 itself).
+
+`created_at`/`modified_at` are Graph's own `createdDateTime`/
+`lastModifiedDateTime`, read off the same Graph object whether the item
+was found already existing or just created - a live run proved that two
+runs of the same item must report the same date, since it's the whole
+point of the field, and `smoke_test.go` asserts this directly. Three
+container kinds carry no date at all, because Graph itself returns none
+for them: the mail folder (`workload: "exchange-mail"`,
+`kind: "folder"`), the calendar (`workload: "exchange-calendar"`,
+`kind: "calendar"`) and the contacts folder (`workload:
+"exchange-contacts"`, `kind: "folder"`). Every other item - messages,
+events, contacts, the OneDrive folder and its files, the SharePoint
+library and its files, the SharePoint list and its items - does carry
+one.
 
 Items are always sorted the same way (by workload, then folder path, then
 name, then ID) before being written, so two manifests from two runs that
@@ -162,20 +208,42 @@ integration suites elsewhere in this repository (those are owned by
 chunks 0.5-0.7, exercise a different, pre-existing Alcion test tenant via
 `internal/tester/tconfig`, and are out of this chunk's scope).
 
-## The nightly job
+## Where integration tests actually run
 
-`.github/workflows/nightly-test-tenant.yml` runs `test-integration` on a
-schedule (04:00 UTC daily) and on demand (`workflow_dispatch`). Repository
-secrets required: **`AZURE_TENANT_ID`, `AZURE_CLIENT_ID`,
-`AZURE_CLIENT_SECRET`**. Repository variables (not secrets, since they are
-not sensitive) required: **`SEED_USER_ID`, `SEED_SITE_ID`**. If any secret
-is missing, the step fails with the same name-only message shown above,
-not a stack trace. Results are reported as the job's pass/fail status, an
-uploaded `nightly-test-tenant-log` artifact, and a short job summary.
+Say this plainly, because it is a real, deliberate arrangement and not a
+shortcut: **the test tenant's credentials are never held by GitHub.** The
+user chose to keep them off GitHub entirely rather than add them as
+repository secrets. That decision is final and is not something to design
+around - there is no mechanism anywhere in this harness for injecting
+alternate or fake credentials into CI, and `.github/workflows/test-tenant.yml`
+does not run on a schedule, because a scheduled job with no credentials
+would fail every single time, and a permanently-red scheduled job is noise
+that gets ignored, which defeats the point of having one.
 
-This workflow has been validated as valid YAML and reviewed step-by-step
-against the existing `ci.yml`/`nightly_test.yml` patterns in this
-repository, but **has not been run** (no real schedule has fired, and no
-`workflow_dispatch` run has been triggered) - true completion needs a human
-to configure the five repository secrets/variables above and either wait
-for the schedule or trigger it manually.
+**Integration tests against the real test tenant run locally, on demand**,
+by a human, through `scripts/with-test-tenant.sh`, exactly as described
+above. That satisfies the PRD's BLD-5 requirement directly - it asks for
+tests that "run nightly or on demand rather than on every change" - even
+though it deviates from the implementation plan's stricter 0.3 row, which
+specifically asked for a scheduled nightly job reading secrets; the user
+approved that deviation explicitly, and the PRD takes precedence over the
+plan.
+
+`.github/workflows/test-tenant.yml` still exists, triggered only by
+`workflow_dispatch`, for two reasons: it keeps the credential-name-only
+failure message exercisable (`AZURE_TENANT_ID`, `AZURE_CLIENT_ID`,
+`AZURE_CLIENT_SECRET` as secrets; `SEED_USER_ID`, `SEED_SITE_ID` as
+variables - none configured on this repository today, so a manual run of
+it will fail, correctly, naming exactly those five), and it gives this
+harness a manual CI entry point for the day credentials are ever made
+available to it (for example a self-hosted runner with network access to
+the tenant). **It is a shape check and a manual entry point, not an
+automated verification.** Nothing in CI proves the harness works against
+real Graph - only a human running it locally does that.
+
+**When to run the local integration tests:** before a gate in the
+implementation plan, and before starting any chunk whose work depends on
+this engine's backup/restore behaviour against real Microsoft 365 data
+(the chunks that come after this one - 0.5 onward - and anything in k3ep
+that assumes a seeded tenant exists in the shape this harness's manifest
+describes).

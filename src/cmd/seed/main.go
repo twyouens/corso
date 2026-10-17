@@ -76,7 +76,9 @@ func main() {
 		os.Exit(1)
 	}
 
-	manifest, err := seed.Run(ctx, client, cfg)
+	manifest, err := seed.Run(ctx, client, cfg, func(line string) {
+		fmt.Println(line)
+	})
 	if err != nil {
 		logger.CtxErr(ctx, err).Error("seeding test tenant")
 		logger.Flush(ctx)

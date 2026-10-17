@@ -34,11 +34,12 @@ var contactsToSeed = []struct {
 
 // seedContacts idempotently ensures the dedicated contacts folder and its
 // known contacts exist in userID's mailbox, and returns a manifest item for
-// each.
-func seedContacts(ctx context.Context, c api.Client, userID string) ([]ManifestItem, error) {
+// each, plus how many of each were found versus freshly created.
+func seedContacts(ctx context.Context, c api.Client, userID string) ([]ManifestItem, WorkloadSummary, error) {
+	summary := WorkloadSummary{Workload: WorkloadExchangeContacts}
 	contacts := c.Contacts()
 
-	folder, _, err := FindOrCreate(
+	folder, folderCreated, err := FindOrCreate(
 		func() (graph.Container, bool, error) {
 			found, err := contacts.GetContainerByName(ctx, userID, "", contactsFolderName)
 			if err == nil {
@@ -56,14 +57,20 @@ func seedContacts(ctx context.Context, c api.Client, userID string) ([]ManifestI
 			return created, clues.Wrap(err, "creating seed contacts folder").OrNil()
 		})
 	if err != nil {
-		return nil, err
+		return nil, summary, err
 	}
+
+	summary.record(folderCreated)
 
 	folderID := ptr.Val(folder.GetId())
 
-	existing, err := listContactIDsByDisplayName(ctx, contacts, userID, folderID)
+	// ContactFolder, like MailFolder and Calendar, has no
+	// createdDateTime/lastModifiedDateTime in Graph at all (its model
+	// embeds Entity, not OutlookItem), so the folder's manifest item below
+	// is correctly dateless; there is nothing to read.
+	existing, err := listContactsByDisplayName(ctx, contacts, userID, folderID)
 	if err != nil {
-		return nil, clues.Wrap(err, "listing seed contacts folder contents")
+		return nil, summary, clues.Wrap(err, "listing seed contacts folder contents")
 	}
 
 	items := []ManifestItem{
@@ -77,55 +84,75 @@ func seedContacts(ctx context.Context, c api.Client, userID string) ([]ManifestI
 	}
 
 	for _, want := range contactsToSeed {
-		contactID, _, err := FindOrCreate(
-			func() (string, bool, error) {
-				id, found := existing[want.displayName]
-				return id, found, nil
+		contact, contactCreated, err := FindOrCreate(
+			func() (models.Contactable, bool, error) {
+				ct, found := existing[want.displayName]
+				return ct, found, nil
 			},
-			func() (string, error) {
-				contact := models.NewContact()
-				contact.SetDisplayName(ptr.To(want.displayName))
-				contact.SetGivenName(ptr.To(want.givenName))
-				contact.SetSurname(ptr.To(want.surname))
+			func() (models.Contactable, error) {
+				newContact := models.NewContact()
+				newContact.SetDisplayName(ptr.To(want.displayName))
+				newContact.SetGivenName(ptr.To(want.givenName))
+				newContact.SetSurname(ptr.To(want.surname))
 
 				email := models.NewEmailAddress()
 				email.SetAddress(ptr.To(want.email))
 				email.SetName(ptr.To(want.displayName))
-				contact.SetEmailAddresses([]models.EmailAddressable{email})
+				newContact.SetEmailAddresses([]models.EmailAddressable{email})
 
-				posted, err := contacts.PostItem(ctx, userID, folderID, contact)
+				posted, err := contacts.PostItem(ctx, userID, folderID, newContact)
 				if err != nil {
-					return "", clues.Wrap(err, fmt.Sprintf("creating seed contact %q", want.displayName))
+					return nil, clues.Wrap(err, fmt.Sprintf("creating seed contact %q", want.displayName))
 				}
 
-				return ptr.Val(posted.GetId()), nil
+				return posted, nil
 			})
 		if err != nil {
-			return nil, err
+			return nil, summary, err
 		}
+
+		summary.record(contactCreated)
 
 		items = append(items, ManifestItem{
 			Workload:   WorkloadExchangeContacts,
 			Kind:       "contact",
-			ID:         contactID,
+			ID:         ptr.Val(contact.GetId()),
 			Name:       want.displayName,
 			FolderPath: contactsFolderName,
+			CreatedAt:  contact.GetCreatedDateTime(),
+			ModifiedAt: contact.GetLastModifiedDateTime(),
 			ResourceID: userID,
 		})
 	}
 
-	return items, nil
+	return items, summary, nil
 }
 
-// listContactIDsByDisplayName returns a displayName->id map of the contacts
-// already in folderID. api.Contacts has no "list contacts" wrapper (only
-// GetItem-by-ID and PostItem), so this uses the same raw-client escape
-// hatch as listMessageIDsBySubject/listEventIDsBySubject.
-func listContactIDsByDisplayName(
+// contactsByDisplayName builds a displayName->contact map from an
+// already-fetched slice of contacts. Split out from listContactsByDisplayName
+// so the map-building logic - the actual idempotency decision input - is
+// unit-testable without a Graph call.
+func contactsByDisplayName(contacts []models.Contactable) map[string]models.Contactable {
+	out := map[string]models.Contactable{}
+
+	for _, contact := range contacts {
+		out[ptr.Val(contact.GetDisplayName())] = contact
+	}
+
+	return out
+}
+
+// listContactsByDisplayName returns a displayName->contact map of the
+// contacts already in folderID, so seedContacts can decide per-contact
+// whether to create it, and - whether found or freshly created - read the
+// same real Graph dates either way. api.Contacts has no "list contacts"
+// wrapper (only GetItem-by-ID and PostItem), so this uses the same
+// raw-client escape hatch as listMessagesBySubject/listEventsBySubject.
+func listContactsByDisplayName(
 	ctx context.Context,
 	contacts api.Contacts,
 	userID, folderID string,
-) (map[string]string, error) {
+) (map[string]models.Contactable, error) {
 	resp, err := contacts.Stable.
 		Client().
 		Users().
@@ -135,18 +162,12 @@ func listContactIDsByDisplayName(
 		Contacts().
 		Get(ctx, &users.ItemContactFoldersItemContactsRequestBuilderGetRequestConfiguration{
 			QueryParameters: &users.ItemContactFoldersItemContactsRequestBuilderGetQueryParameters{
-				Select: []string{"id", "displayName"},
+				Select: []string{"id", "displayName", "createdDateTime", "lastModifiedDateTime"},
 			},
 		})
 	if err != nil {
 		return nil, clues.Wrap(err, "listing contacts")
 	}
 
-	out := map[string]string{}
-
-	for _, contact := range resp.GetValue() {
-		out[ptr.Val(contact.GetDisplayName())] = ptr.Val(contact.GetId())
-	}
-
-	return out, nil
+	return contactsByDisplayName(resp.GetValue()), nil
 }
