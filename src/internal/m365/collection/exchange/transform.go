@@ -74,10 +74,6 @@ var eventUnsupportedAdditionalData = []string{
 	"@odata.context",
 	// Appears to be similar to the change tag.
 	"@odata.etag",
-	// Remove exceptions for recurring events. These will be present in objects
-	// once we start using the API that is currently in beta.
-	"cancelledOccurrences",
-	"exceptionOccurrences",
 }
 
 // ToEventSimplified transforms an event to simplified restore format
@@ -103,6 +99,15 @@ func toEventSimplified(orig models.Eventable) models.Eventable {
 	orig.SetId(nil)
 	orig.SetOdataType(nil)
 	orig.SetChangeKey(nil)
+
+	// cancelledOccurrences and exceptionOccurrences used to land in
+	// AdditionalData, since the fork fetched them from a beta-only Graph
+	// endpoint using a stable-SDK event type that had no typed fields for
+	// them. The current Graph SDK has promoted both to typed fields on
+	// Eventable, so they must be cleared here explicitly; deleting them from
+	// the AdditionalData map below no longer has any effect.
+	orig.SetCancelledOccurrences(nil)
+	orig.SetExceptionOccurrences(nil)
 
 	// Additional fields that don't have API support but are ignored by the
 	// server.

@@ -2,7 +2,6 @@ package exchange
 
 import (
 	"context"
-	"fmt"
 	"strings"
 	"time"
 
@@ -10,10 +9,8 @@ import (
 	"github.com/microsoftgraph/msgraph-sdk-go/models"
 
 	"github.com/twyouens/corso/src/internal/common/ptr"
-	"github.com/twyouens/corso/src/internal/common/str"
 	"github.com/twyouens/corso/src/pkg/dttm"
 	"github.com/twyouens/corso/src/pkg/fault"
-	"github.com/twyouens/corso/src/pkg/services/m365/api"
 )
 
 type eventInstanceAndAttachmenter interface {
@@ -45,11 +42,10 @@ func updateRecurringEvents(
 		return nil
 	}
 
-	// Cancellations and exceptions are currently in additional data
-	// but will get their own fields once the beta API lands and
-	// should be moved then
-	cancelledOccurrences := event.GetAdditionalData()["cancelledOccurrences"]
-	exceptionOccurrences := event.GetAdditionalData()["exceptionOccurrences"]
+	// Cancellations and exceptions are typed fields on Eventable (promoted
+	// from the beta API to stable by the Graph SDK that fetched this event).
+	cancelledOccurrences := event.GetCancelledOccurrences()
+	exceptionOccurrences := event.GetExceptionOccurrences()
 
 	err := updateCancelledOccurrences(ctx, eiaa, userID, itemID, cancelledOccurrences)
 	if err != nil {
@@ -73,31 +69,10 @@ func updateExceptionOccurrences(
 	userID string,
 	containerID string,
 	itemID string,
-	exceptionOccurrences any,
+	exceptionOccurrences []models.Eventable,
 	errs *fault.Bus,
 ) error {
-	if exceptionOccurrences == nil {
-		return nil
-	}
-
-	eo, ok := exceptionOccurrences.([]any)
-	if !ok {
-		return clues.New("converting exceptionOccurrences to []any").
-			With("type", fmt.Sprintf("%T", exceptionOccurrences))
-	}
-
-	for _, instance := range eo {
-		instance, ok := instance.(map[string]any)
-		if !ok {
-			return clues.New("converting instance to map[string]any").
-				With("type", fmt.Sprintf("%T", instance))
-		}
-
-		evt, err := api.EventFromMap(instance)
-		if err != nil {
-			return clues.Wrap(err, "parsing exception event")
-		}
-
+	for _, evt := range exceptionOccurrences {
 		start := ptr.Val(evt.GetOriginalStart())
 		startStr := dttm.FormatTo(start, dttm.DateOnly)
 		endStr := dttm.FormatTo(start.Add(24*time.Hour), dttm.DateOnly)
@@ -126,14 +101,10 @@ func updateExceptionOccurrences(
 			return clues.Wrap(err, "updating event instance")
 		}
 
-		// We are creating event again from map as `toEventSimplified`
-		// removed the attachments and creating a clone from start of
-		// the event is non-trivial
-		evt, err = api.EventFromMap(instance)
-		if err != nil {
-			return clues.Wrap(err, "parsing event instance")
-		}
-
+		// toEventSimplified mutates evt in place (and returns the same
+		// value) but never touches its attachments, so evt still carries
+		// whatever attachments fixupExceptionOccurrences attached to this
+		// exception occurrence at backup time.
 		err = updateAttachments(
 			ictx,
 			eiaa,
@@ -158,27 +129,12 @@ func updateCancelledOccurrences(
 	eiaa eventInstanceAndAttachmenter,
 	userID string,
 	itemID string,
-	cancelledOccurrences any,
+	cancelledOccurrences []string,
 ) error {
-	if cancelledOccurrences == nil {
-		return nil
-	}
-
-	co, ok := cancelledOccurrences.([]any)
-	if !ok {
-		return clues.New("converting cancelledOccurrences to []any").
-			With("type", fmt.Sprintf("%T", cancelledOccurrences))
-	}
-
 	// OPTIMIZATION: We can fetch a date range instead of fetching
 	// instances if we have multiple cancelled events which are nearby
 	// and reduce the number of API calls that we have to make
-	for _, instance := range co {
-		instance, err := str.AnyToString(instance)
-		if err != nil {
-			return err
-		}
-
+	for _, instance := range cancelledOccurrences {
 		splits := strings.Split(instance, ".")
 
 		startStr := splits[len(splits)-1]

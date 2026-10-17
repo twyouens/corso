@@ -3,7 +3,6 @@ package ics
 import (
 	"context"
 	"encoding/base64"
-	"encoding/json"
 	"fmt"
 	"net/mail"
 	"strings"
@@ -251,29 +250,14 @@ func FromEventable(ctx context.Context, event models.Eventable) (string, error) 
 		return "", clues.Wrap(err, "updating event properties")
 	}
 
-	exceptionOcurrances := event.GetAdditionalData()["exceptionOccurrences"]
-	if exceptionOcurrances == nil {
-		return cal.Serialize(), nil
-	}
+	// exceptionOccurrences used to arrive only in AdditionalData, because the
+	// fork fetched it from a beta-only Graph endpoint using a stable-SDK
+	// event type with no typed field for it. The current Graph SDK has
+	// promoted exceptionOccurrences to a typed []Eventable field, so each
+	// exception is already a fully-typed Eventable.
+	exceptionOccurrences := event.GetExceptionOccurrences()
 
-	for _, occ := range exceptionOcurrances.([]any) {
-		instance, ok := occ.(map[string]any)
-		if !ok {
-			return "", clues.NewWC(ctx, "converting exception instance to map[string]any").
-				With("interface_type", fmt.Sprintf("%T", instance))
-		}
-
-		exBody, err := json.Marshal(instance)
-		if err != nil {
-			return "", clues.WrapWC(ctx, err, "marshalling exception instance").
-				With("instance_id", instance["id"])
-		}
-
-		exception, err := api.BytesToEventable(exBody)
-		if err != nil {
-			return "", clues.WrapWC(ctx, err, "converting to eventable")
-		}
-
+	for _, exception := range exceptionOccurrences {
 		exICalEvent := cal.AddEvent(id)
 		start := exception.GetOriginalStart() // will always be in UTC
 
