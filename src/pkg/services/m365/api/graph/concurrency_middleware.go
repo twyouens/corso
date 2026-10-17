@@ -10,10 +10,10 @@ import (
 	"github.com/alcionai/clues"
 	khttp "github.com/microsoft/kiota-http-go"
 
-	"github.com/alcionai/corso/src/internal/common/limiters"
-	"github.com/alcionai/corso/src/pkg/count"
-	"github.com/alcionai/corso/src/pkg/logger"
-	"github.com/alcionai/corso/src/pkg/path"
+	"github.com/twyouens/corso/src/internal/common/limiters"
+	"github.com/twyouens/corso/src/pkg/count"
+	"github.com/twyouens/corso/src/pkg/logger"
+	"github.com/twyouens/corso/src/pkg/path"
 )
 
 // ---------------------------------------------------------------------------

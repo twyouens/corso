@@ -1,7 +1,7 @@
 package metadata
 
 import (
-	"github.com/alcionai/corso/src/pkg/path"
+	"github.com/twyouens/corso/src/pkg/path"
 )
 
 func IsMetadataFile(p path.Path) bool {

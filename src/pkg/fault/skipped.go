@@ -3,7 +3,7 @@ package fault
 import (
 	"context"
 
-	"github.com/alcionai/corso/src/cli/print"
+	"github.com/twyouens/corso/src/cli/print"
 )
 
 // AddSkipper presents an interface that allows callers to

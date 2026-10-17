@@ -13,14 +13,14 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
-	"github.com/alcionai/corso/src/internal/common/readers"
-	"github.com/alcionai/corso/src/internal/data"
-	dataMock "github.com/alcionai/corso/src/internal/data/mock"
-	istats "github.com/alcionai/corso/src/internal/stats"
-	"github.com/alcionai/corso/src/internal/tester"
-	"github.com/alcionai/corso/src/pkg/count"
-	"github.com/alcionai/corso/src/pkg/fault"
-	"github.com/alcionai/corso/src/pkg/path"
+	"github.com/twyouens/corso/src/internal/common/readers"
+	"github.com/twyouens/corso/src/internal/data"
+	dataMock "github.com/twyouens/corso/src/internal/data/mock"
+	istats "github.com/twyouens/corso/src/internal/stats"
+	"github.com/twyouens/corso/src/internal/tester"
+	"github.com/twyouens/corso/src/pkg/count"
+	"github.com/twyouens/corso/src/pkg/fault"
+	"github.com/twyouens/corso/src/pkg/path"
 )
 
 // ---------------

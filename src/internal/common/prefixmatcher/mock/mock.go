@@ -6,7 +6,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/alcionai/corso/src/internal/common/prefixmatcher"
+	"github.com/twyouens/corso/src/internal/common/prefixmatcher"
 )
 
 var _ prefixmatcher.StringSetReader = &PrefixMap{}

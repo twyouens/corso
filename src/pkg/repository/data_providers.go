@@ -6,13 +6,13 @@ import (
 
 	"github.com/alcionai/clues"
 
-	"github.com/alcionai/corso/src/internal/data"
-	"github.com/alcionai/corso/src/internal/m365"
-	"github.com/alcionai/corso/src/internal/observe"
-	"github.com/alcionai/corso/src/internal/operations/inject"
-	"github.com/alcionai/corso/src/pkg/account"
-	"github.com/alcionai/corso/src/pkg/path"
-	"github.com/alcionai/corso/src/pkg/store"
+	"github.com/twyouens/corso/src/internal/data"
+	"github.com/twyouens/corso/src/internal/m365"
+	"github.com/twyouens/corso/src/internal/observe"
+	"github.com/twyouens/corso/src/internal/operations/inject"
+	"github.com/twyouens/corso/src/pkg/account"
+	"github.com/twyouens/corso/src/pkg/path"
+	"github.com/twyouens/corso/src/pkg/store"
 )
 
 type DataProvider interface {

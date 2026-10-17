@@ -3,7 +3,7 @@ package details
 import (
 	"context"
 
-	"github.com/alcionai/corso/src/cli/print"
+	"github.com/twyouens/corso/src/cli/print"
 )
 
 // DetailsModel describes what was stored in a Backup

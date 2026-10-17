@@ -5,16 +5,16 @@ import (
 
 	"github.com/alcionai/clues"
 
-	"github.com/alcionai/corso/src/internal/data"
-	"github.com/alcionai/corso/src/internal/m365/collection/exchange"
-	"github.com/alcionai/corso/src/internal/m365/support"
-	"github.com/alcionai/corso/src/internal/operations/inject"
-	"github.com/alcionai/corso/src/pkg/backup/details"
-	"github.com/alcionai/corso/src/pkg/count"
-	"github.com/alcionai/corso/src/pkg/fault"
-	"github.com/alcionai/corso/src/pkg/logger"
-	"github.com/alcionai/corso/src/pkg/path"
-	"github.com/alcionai/corso/src/pkg/services/m365/api/graph"
+	"github.com/twyouens/corso/src/internal/data"
+	"github.com/twyouens/corso/src/internal/m365/collection/exchange"
+	"github.com/twyouens/corso/src/internal/m365/support"
+	"github.com/twyouens/corso/src/internal/operations/inject"
+	"github.com/twyouens/corso/src/pkg/backup/details"
+	"github.com/twyouens/corso/src/pkg/count"
+	"github.com/twyouens/corso/src/pkg/fault"
+	"github.com/twyouens/corso/src/pkg/logger"
+	"github.com/twyouens/corso/src/pkg/path"
+	"github.com/twyouens/corso/src/pkg/services/m365/api/graph"
 )
 
 // ConsumeRestoreCollections restores M365 objects in data.RestoreCollection to MSFT

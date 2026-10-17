@@ -7,8 +7,8 @@ import (
 	"github.com/kopia/kopia/repo/blob"
 	"github.com/kopia/kopia/repo/blob/s3"
 
-	"github.com/alcionai/corso/src/pkg/control/repository"
-	"github.com/alcionai/corso/src/pkg/storage"
+	"github.com/twyouens/corso/src/pkg/control/repository"
+	"github.com/twyouens/corso/src/pkg/storage"
 )
 
 const (

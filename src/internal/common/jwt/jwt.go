@@ -7,7 +7,7 @@ import (
 	"github.com/alcionai/clues"
 	jwt "github.com/golang-jwt/jwt/v5"
 
-	"github.com/alcionai/corso/src/pkg/logger"
+	"github.com/twyouens/corso/src/pkg/logger"
 )
 
 // IsJWTExpired checks if the JWT token is past expiry by analyzing the

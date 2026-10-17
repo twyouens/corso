@@ -10,9 +10,8 @@ FROM alpine:3
 
 LABEL org.opencontainers.image.title="Corso"
 LABEL org.opencontainers.image.description="Free, Secure, and Open-Source Backup for Microsoft 365"
-LABEL org.opencontainers.image.url="https://github.com/alcionai/corso"
-LABEL org.opencontainers.image.source="https://github.com/alcionai/corso"
-LABEL org.opencontainers.image.vendor="Alcion, Inc."
+LABEL org.opencontainers.image.url="https://github.com/twyouens/corso"
+LABEL org.opencontainers.image.source="https://github.com/twyouens/corso"
 
 COPY --from=builder /go/src/app/corso /corso
 

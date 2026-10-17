@@ -9,9 +9,9 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
-	betaAPI "github.com/alcionai/corso/src/internal/m365/service/sharepoint/api"
-	"github.com/alcionai/corso/src/internal/tester"
-	"github.com/alcionai/corso/src/pkg/services/m365/api"
+	betaAPI "github.com/twyouens/corso/src/internal/m365/service/sharepoint/api"
+	"github.com/twyouens/corso/src/internal/tester"
+	"github.com/twyouens/corso/src/pkg/services/m365/api"
 )
 
 type MockSuite struct {

@@ -7,13 +7,13 @@ import (
 	"github.com/alcionai/clues"
 	"github.com/microsoftgraph/msgraph-sdk-go/models"
 
-	"github.com/alcionai/corso/src/internal/common/idname"
-	"github.com/alcionai/corso/src/internal/common/ptr"
-	"github.com/alcionai/corso/src/internal/common/syncd"
-	"github.com/alcionai/corso/src/internal/m365/collection/drive/metadata"
-	"github.com/alcionai/corso/src/pkg/fault"
-	"github.com/alcionai/corso/src/pkg/services/m365/api"
-	"github.com/alcionai/corso/src/pkg/services/m365/api/graph"
+	"github.com/twyouens/corso/src/internal/common/idname"
+	"github.com/twyouens/corso/src/internal/common/ptr"
+	"github.com/twyouens/corso/src/internal/common/syncd"
+	"github.com/twyouens/corso/src/internal/m365/collection/drive/metadata"
+	"github.com/twyouens/corso/src/pkg/fault"
+	"github.com/twyouens/corso/src/pkg/services/m365/api"
+	"github.com/twyouens/corso/src/pkg/services/m365/api/graph"
 )
 
 type driveInfo struct {

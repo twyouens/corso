@@ -8,14 +8,14 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
 
-	"github.com/alcionai/corso/src/internal/tester"
-	"github.com/alcionai/corso/src/internal/version"
-	"github.com/alcionai/corso/src/pkg/backup/details"
-	"github.com/alcionai/corso/src/pkg/backup/details/testdata"
-	"github.com/alcionai/corso/src/pkg/dttm"
-	"github.com/alcionai/corso/src/pkg/fault"
-	"github.com/alcionai/corso/src/pkg/path"
-	"github.com/alcionai/corso/src/pkg/selectors"
+	"github.com/twyouens/corso/src/internal/tester"
+	"github.com/twyouens/corso/src/internal/version"
+	"github.com/twyouens/corso/src/pkg/backup/details"
+	"github.com/twyouens/corso/src/pkg/backup/details/testdata"
+	"github.com/twyouens/corso/src/pkg/dttm"
+	"github.com/twyouens/corso/src/pkg/fault"
+	"github.com/twyouens/corso/src/pkg/path"
+	"github.com/twyouens/corso/src/pkg/selectors"
 )
 
 type SelectorReduceSuite struct {

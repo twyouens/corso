@@ -10,11 +10,11 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
 
-	"github.com/alcionai/corso/src/internal/data"
-	dataMock "github.com/alcionai/corso/src/internal/data/mock"
-	"github.com/alcionai/corso/src/internal/tester"
-	"github.com/alcionai/corso/src/internal/version"
-	"github.com/alcionai/corso/src/pkg/services/m365/api/graph/metadata"
+	"github.com/twyouens/corso/src/internal/data"
+	dataMock "github.com/twyouens/corso/src/internal/data/mock"
+	"github.com/twyouens/corso/src/internal/tester"
+	"github.com/twyouens/corso/src/internal/version"
+	"github.com/twyouens/corso/src/pkg/services/m365/api/graph/metadata"
 )
 
 type ExportUnitSuite struct {

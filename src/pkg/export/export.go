@@ -4,9 +4,9 @@ import (
 	"context"
 	"io"
 
-	"github.com/alcionai/corso/src/internal/data"
-	"github.com/alcionai/corso/src/pkg/control"
-	"github.com/alcionai/corso/src/pkg/metrics"
+	"github.com/twyouens/corso/src/internal/data"
+	"github.com/twyouens/corso/src/pkg/control"
+	"github.com/twyouens/corso/src/pkg/metrics"
 )
 
 // ---------------------------------------------------------------------------

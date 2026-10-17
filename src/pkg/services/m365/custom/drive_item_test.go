@@ -14,9 +14,9 @@ import (
 	"github.com/stretchr/testify/suite"
 	"gotest.tools/v3/assert"
 
-	"github.com/alcionai/corso/src/internal/common/ptr"
-	"github.com/alcionai/corso/src/internal/common/str"
-	"github.com/alcionai/corso/src/internal/tester"
+	"github.com/twyouens/corso/src/internal/common/ptr"
+	"github.com/twyouens/corso/src/internal/common/str"
+	"github.com/twyouens/corso/src/internal/tester"
 )
 
 type driveItemUnitSuite struct {

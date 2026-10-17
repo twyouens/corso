@@ -8,13 +8,13 @@ import (
 
 	"github.com/alcionai/clues"
 
-	"github.com/alcionai/corso/src/internal/common/ptr"
-	"github.com/alcionai/corso/src/internal/data"
-	"github.com/alcionai/corso/src/internal/diagnostics"
-	"github.com/alcionai/corso/src/pkg/backup/details"
-	"github.com/alcionai/corso/src/pkg/fault"
-	betamodels "github.com/alcionai/corso/src/pkg/services/m365/api/graph/betasdk/models"
-	betasites "github.com/alcionai/corso/src/pkg/services/m365/api/graph/betasdk/sites"
+	"github.com/twyouens/corso/src/internal/common/ptr"
+	"github.com/twyouens/corso/src/internal/data"
+	"github.com/twyouens/corso/src/internal/diagnostics"
+	"github.com/twyouens/corso/src/pkg/backup/details"
+	"github.com/twyouens/corso/src/pkg/fault"
+	betamodels "github.com/twyouens/corso/src/pkg/services/m365/api/graph/betasdk/models"
+	betasites "github.com/twyouens/corso/src/pkg/services/m365/api/graph/betasdk/sites"
 )
 
 type NameID struct {
@@ -143,7 +143,7 @@ func fetchPageOptions() *betasites.ItemPagesRequestBuilderGetRequestConfiguratio
 // DeleteSitePage removes the selected page from the SharePoint Site
 // https://learn.microsoft.com/en-us/graph/api/sitepage-delete?view=graph-rest-beta
 // deletes require unique http clients
-// https://github.com/alcionai/corso/issues/2707
+// https://github.com/twyouens/corso/issues/2707
 func DeleteSitePage(
 	ctx context.Context,
 	serv *BetaService,

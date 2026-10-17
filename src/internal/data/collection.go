@@ -5,9 +5,9 @@ import (
 	"io"
 	"time"
 
-	"github.com/alcionai/corso/src/pkg/backup/details"
-	"github.com/alcionai/corso/src/pkg/fault"
-	"github.com/alcionai/corso/src/pkg/path"
+	"github.com/twyouens/corso/src/pkg/backup/details"
+	"github.com/twyouens/corso/src/pkg/fault"
+	"github.com/twyouens/corso/src/pkg/path"
 )
 
 // ---------------------------------------------------------------------------

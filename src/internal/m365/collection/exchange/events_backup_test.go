@@ -9,11 +9,11 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
 
-	"github.com/alcionai/corso/src/internal/tester"
-	"github.com/alcionai/corso/src/pkg/control"
-	"github.com/alcionai/corso/src/pkg/fault"
-	"github.com/alcionai/corso/src/pkg/services/m365/api"
-	"github.com/alcionai/corso/src/pkg/services/m365/api/graph"
+	"github.com/twyouens/corso/src/internal/tester"
+	"github.com/twyouens/corso/src/pkg/control"
+	"github.com/twyouens/corso/src/pkg/fault"
+	"github.com/twyouens/corso/src/pkg/services/m365/api"
+	"github.com/twyouens/corso/src/pkg/services/m365/api/graph"
 )
 
 type EventsBackupHandlerUnitSuite struct {

@@ -6,9 +6,9 @@ import (
 	"github.com/alcionai/clues"
 	"github.com/spf13/cobra"
 
-	"github.com/alcionai/corso/src/cli/flags"
-	"github.com/alcionai/corso/src/internal/common/ptr"
-	"github.com/alcionai/corso/src/pkg/control/repository"
+	"github.com/twyouens/corso/src/cli/flags"
+	"github.com/twyouens/corso/src/internal/common/ptr"
+	"github.com/twyouens/corso/src/pkg/control/repository"
 )
 
 type retentionCfgOpts struct {

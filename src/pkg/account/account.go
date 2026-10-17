@@ -3,7 +3,7 @@ package account
 import (
 	"github.com/alcionai/clues"
 
-	"github.com/alcionai/corso/src/internal/common"
+	"github.com/twyouens/corso/src/internal/common"
 )
 
 type accountProvider int

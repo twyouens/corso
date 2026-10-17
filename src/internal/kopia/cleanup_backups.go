@@ -12,11 +12,11 @@ import (
 	"golang.org/x/exp/maps"
 	"golang.org/x/exp/slices"
 
-	"github.com/alcionai/corso/src/internal/data"
-	"github.com/alcionai/corso/src/internal/model"
-	"github.com/alcionai/corso/src/pkg/backup"
-	"github.com/alcionai/corso/src/pkg/logger"
-	"github.com/alcionai/corso/src/pkg/store"
+	"github.com/twyouens/corso/src/internal/data"
+	"github.com/twyouens/corso/src/internal/model"
+	"github.com/twyouens/corso/src/pkg/backup"
+	"github.com/twyouens/corso/src/pkg/logger"
+	"github.com/twyouens/corso/src/pkg/store"
 )
 
 const (

@@ -9,11 +9,11 @@ import (
 	"github.com/alcionai/clues"
 	"github.com/microsoftgraph/msgraph-sdk-go/models"
 
-	"github.com/alcionai/corso/src/internal/common/keys"
-	"github.com/alcionai/corso/src/internal/common/ptr"
-	"github.com/alcionai/corso/src/internal/common/str"
-	"github.com/alcionai/corso/src/pkg/backup/details"
-	"github.com/alcionai/corso/src/pkg/fault"
+	"github.com/twyouens/corso/src/internal/common/keys"
+	"github.com/twyouens/corso/src/internal/common/ptr"
+	"github.com/twyouens/corso/src/internal/common/str"
+	"github.com/twyouens/corso/src/pkg/backup/details"
+	"github.com/twyouens/corso/src/pkg/fault"
 )
 
 var ErrSkippableListTemplate = clues.New("unable to create lists with skippable templates")

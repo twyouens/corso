@@ -9,8 +9,8 @@ import (
 
 	"github.com/alcionai/clues"
 
-	"github.com/alcionai/corso/src/pkg/backup/details"
-	"github.com/alcionai/corso/src/pkg/logger"
+	"github.com/twyouens/corso/src/pkg/backup/details"
+	"github.com/twyouens/corso/src/pkg/logger"
 )
 
 const (

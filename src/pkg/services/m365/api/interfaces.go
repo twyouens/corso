@@ -5,7 +5,7 @@ import (
 
 	"github.com/microsoft/kiota-abstractions-go/serialization"
 
-	"github.com/alcionai/corso/src/pkg/fault"
+	"github.com/twyouens/corso/src/pkg/fault"
 )
 
 type GetAndSerializeItemer[INFO any] interface {

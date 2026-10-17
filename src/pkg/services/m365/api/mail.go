@@ -13,14 +13,14 @@ import (
 	"github.com/microsoftgraph/msgraph-sdk-go/models"
 	"github.com/microsoftgraph/msgraph-sdk-go/users"
 
-	"github.com/alcionai/corso/src/internal/common/ptr"
-	"github.com/alcionai/corso/src/internal/common/sanitize"
-	"github.com/alcionai/corso/src/pkg/backup/details"
-	"github.com/alcionai/corso/src/pkg/dttm"
-	"github.com/alcionai/corso/src/pkg/errs/core"
-	"github.com/alcionai/corso/src/pkg/fault"
-	"github.com/alcionai/corso/src/pkg/logger"
-	"github.com/alcionai/corso/src/pkg/services/m365/api/graph"
+	"github.com/twyouens/corso/src/internal/common/ptr"
+	"github.com/twyouens/corso/src/internal/common/sanitize"
+	"github.com/twyouens/corso/src/pkg/backup/details"
+	"github.com/twyouens/corso/src/pkg/dttm"
+	"github.com/twyouens/corso/src/pkg/errs/core"
+	"github.com/twyouens/corso/src/pkg/fault"
+	"github.com/twyouens/corso/src/pkg/logger"
+	"github.com/twyouens/corso/src/pkg/services/m365/api/graph"
 )
 
 const (
@@ -72,7 +72,7 @@ func (c Mail) DeleteContainer(
 	userID, containerID string,
 ) error {
 	// deletes require unique http clients
-	// https://github.com/alcionai/corso/issues/2707
+	// https://github.com/twyouens/corso/issues/2707
 	srv, err := NewService(c.Credentials, c.counter)
 	if err != nil {
 		return clues.StackWC(ctx, err)
@@ -506,7 +506,7 @@ func (c Mail) DeleteItem(
 	userID, itemID string,
 ) error {
 	// deletes require unique http clients
-	// https://github.com/alcionai/corso/issues/2707
+	// https://github.com/twyouens/corso/issues/2707
 	srv, err := NewService(c.Credentials, c.counter)
 	if err != nil {
 		return clues.StackWC(ctx, err)

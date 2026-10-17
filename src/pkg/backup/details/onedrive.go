@@ -6,8 +6,8 @@ import (
 	"github.com/alcionai/clues"
 	"github.com/dustin/go-humanize"
 
-	"github.com/alcionai/corso/src/pkg/dttm"
-	"github.com/alcionai/corso/src/pkg/path"
+	"github.com/twyouens/corso/src/pkg/dttm"
+	"github.com/twyouens/corso/src/pkg/path"
 )
 
 // NewOneDriveLocationIDer builds a LocationIDer for the drive and folder path.

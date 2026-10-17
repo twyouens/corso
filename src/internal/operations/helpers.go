@@ -6,9 +6,9 @@ import (
 
 	"github.com/alcionai/clues"
 
-	"github.com/alcionai/corso/src/pkg/control"
-	"github.com/alcionai/corso/src/pkg/fault"
-	"github.com/alcionai/corso/src/pkg/logger"
+	"github.com/twyouens/corso/src/pkg/control"
+	"github.com/twyouens/corso/src/pkg/fault"
+	"github.com/twyouens/corso/src/pkg/logger"
 )
 
 // finalizeErrorHandling ensures the operation follows the

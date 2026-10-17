@@ -7,16 +7,16 @@ import (
 
 	"github.com/alcionai/clues"
 
-	"github.com/alcionai/corso/src/internal/converters/eml"
-	"github.com/alcionai/corso/src/internal/converters/ics"
-	"github.com/alcionai/corso/src/internal/converters/vcf"
-	"github.com/alcionai/corso/src/internal/data"
-	"github.com/alcionai/corso/src/pkg/control"
-	"github.com/alcionai/corso/src/pkg/export"
-	"github.com/alcionai/corso/src/pkg/fault"
-	"github.com/alcionai/corso/src/pkg/logger"
-	"github.com/alcionai/corso/src/pkg/metrics"
-	"github.com/alcionai/corso/src/pkg/path"
+	"github.com/twyouens/corso/src/internal/converters/eml"
+	"github.com/twyouens/corso/src/internal/converters/ics"
+	"github.com/twyouens/corso/src/internal/converters/vcf"
+	"github.com/twyouens/corso/src/internal/data"
+	"github.com/twyouens/corso/src/pkg/control"
+	"github.com/twyouens/corso/src/pkg/export"
+	"github.com/twyouens/corso/src/pkg/fault"
+	"github.com/twyouens/corso/src/pkg/logger"
+	"github.com/twyouens/corso/src/pkg/metrics"
+	"github.com/twyouens/corso/src/pkg/path"
 )
 
 func NewExportCollection(

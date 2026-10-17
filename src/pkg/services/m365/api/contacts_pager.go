@@ -7,10 +7,10 @@ import (
 	"github.com/microsoftgraph/msgraph-sdk-go/models"
 	"github.com/microsoftgraph/msgraph-sdk-go/users"
 
-	"github.com/alcionai/corso/src/internal/common/ptr"
-	"github.com/alcionai/corso/src/pkg/path"
-	"github.com/alcionai/corso/src/pkg/services/m365/api/graph"
-	"github.com/alcionai/corso/src/pkg/services/m365/api/pagers"
+	"github.com/twyouens/corso/src/internal/common/ptr"
+	"github.com/twyouens/corso/src/pkg/path"
+	"github.com/twyouens/corso/src/pkg/services/m365/api/graph"
+	"github.com/twyouens/corso/src/pkg/services/m365/api/pagers"
 )
 
 // ---------------------------------------------------------------------------

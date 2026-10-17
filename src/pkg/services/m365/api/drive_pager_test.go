@@ -13,10 +13,10 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
-	"github.com/alcionai/corso/src/internal/common/ptr"
-	"github.com/alcionai/corso/src/internal/tester"
-	"github.com/alcionai/corso/src/internal/tester/tconfig"
-	graphTD "github.com/alcionai/corso/src/pkg/services/m365/api/graph/testdata"
+	"github.com/twyouens/corso/src/internal/common/ptr"
+	"github.com/twyouens/corso/src/internal/tester"
+	"github.com/twyouens/corso/src/internal/tester/tconfig"
+	graphTD "github.com/twyouens/corso/src/pkg/services/m365/api/graph/testdata"
 )
 
 type DrivePagerIntgSuite struct {

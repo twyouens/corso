@@ -1,4 +1,4 @@
-module github.com/alcionai/corso/src
+module github.com/twyouens/corso/src
 
 go 1.21
 

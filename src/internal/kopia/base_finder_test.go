@@ -12,12 +12,12 @@ import (
 	"github.com/stretchr/testify/suite"
 	"golang.org/x/exp/maps"
 
-	"github.com/alcionai/corso/src/internal/data"
-	"github.com/alcionai/corso/src/internal/model"
-	"github.com/alcionai/corso/src/internal/tester"
-	"github.com/alcionai/corso/src/pkg/backup"
-	"github.com/alcionai/corso/src/pkg/backup/identity"
-	"github.com/alcionai/corso/src/pkg/path"
+	"github.com/twyouens/corso/src/internal/data"
+	"github.com/twyouens/corso/src/internal/model"
+	"github.com/twyouens/corso/src/internal/tester"
+	"github.com/twyouens/corso/src/pkg/backup"
+	"github.com/twyouens/corso/src/pkg/backup/identity"
+	"github.com/twyouens/corso/src/pkg/path"
 )
 
 var (

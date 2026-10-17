@@ -9,8 +9,8 @@ import (
 	khttp "github.com/microsoft/kiota-http-go"
 	msgraphsdkgo "github.com/microsoftgraph/msgraph-sdk-go"
 
-	"github.com/alcionai/corso/src/pkg/account"
-	"github.com/alcionai/corso/src/pkg/count"
+	"github.com/twyouens/corso/src/pkg/account"
+	"github.com/twyouens/corso/src/pkg/count"
 )
 
 // authMock implements the

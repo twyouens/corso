@@ -4,8 +4,8 @@ import (
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 
-	"github.com/alcionai/corso/src/cli/flags"
-	"github.com/alcionai/corso/src/cli/utils"
+	"github.com/twyouens/corso/src/cli/flags"
+	"github.com/twyouens/corso/src/cli/utils"
 )
 
 // called by export.go to map subcommands to provider-specific handling.

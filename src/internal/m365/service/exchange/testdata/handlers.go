@@ -7,11 +7,11 @@ import (
 	"github.com/alcionai/clues"
 	"github.com/stretchr/testify/require"
 
-	"github.com/alcionai/corso/src/internal/m365/collection/exchange"
-	"github.com/alcionai/corso/src/pkg/fault"
-	"github.com/alcionai/corso/src/pkg/path"
-	"github.com/alcionai/corso/src/pkg/services/m365/api"
-	"github.com/alcionai/corso/src/pkg/services/m365/api/graph"
+	"github.com/twyouens/corso/src/internal/m365/collection/exchange"
+	"github.com/twyouens/corso/src/pkg/fault"
+	"github.com/twyouens/corso/src/pkg/path"
+	"github.com/twyouens/corso/src/pkg/services/m365/api"
+	"github.com/twyouens/corso/src/pkg/services/m365/api/graph"
 )
 
 func PopulateContainerCache(

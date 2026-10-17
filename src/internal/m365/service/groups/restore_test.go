@@ -9,16 +9,16 @@ import (
 	"github.com/stretchr/testify/suite"
 	"golang.org/x/exp/slices"
 
-	"github.com/alcionai/corso/src/internal/data"
-	"github.com/alcionai/corso/src/internal/data/mock"
-	"github.com/alcionai/corso/src/internal/operations/inject"
-	"github.com/alcionai/corso/src/internal/tester"
-	"github.com/alcionai/corso/src/internal/tester/its"
-	"github.com/alcionai/corso/src/internal/tester/tconfig"
-	"github.com/alcionai/corso/src/pkg/fault"
-	"github.com/alcionai/corso/src/pkg/path"
-	"github.com/alcionai/corso/src/pkg/services/m365/api"
-	"github.com/alcionai/corso/src/pkg/services/m365/api/graph"
+	"github.com/twyouens/corso/src/internal/data"
+	"github.com/twyouens/corso/src/internal/data/mock"
+	"github.com/twyouens/corso/src/internal/operations/inject"
+	"github.com/twyouens/corso/src/internal/tester"
+	"github.com/twyouens/corso/src/internal/tester/its"
+	"github.com/twyouens/corso/src/internal/tester/tconfig"
+	"github.com/twyouens/corso/src/pkg/fault"
+	"github.com/twyouens/corso/src/pkg/path"
+	"github.com/twyouens/corso/src/pkg/services/m365/api"
+	"github.com/twyouens/corso/src/pkg/services/m365/api/graph"
 )
 
 type GroupsUnitSuite struct {

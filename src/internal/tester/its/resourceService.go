@@ -1,6 +1,6 @@
 package its
 
-import "github.com/alcionai/corso/src/pkg/path"
+import "github.com/twyouens/corso/src/pkg/path"
 
 type ResourceServicer interface {
 	Resource() IDs

@@ -5,9 +5,9 @@ import (
 
 	"github.com/alcionai/clues"
 
-	"github.com/alcionai/corso/src/cli/print"
-	"github.com/alcionai/corso/src/internal/version"
-	"github.com/alcionai/corso/src/pkg/path"
+	"github.com/twyouens/corso/src/cli/print"
+	"github.com/twyouens/corso/src/internal/version"
+	"github.com/twyouens/corso/src/pkg/path"
 )
 
 // Add a new type so we can transparently use PrintAll in different situations.

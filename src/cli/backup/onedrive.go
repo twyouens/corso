@@ -5,12 +5,12 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
-	"github.com/alcionai/corso/src/cli/flags"
-	. "github.com/alcionai/corso/src/cli/print"
-	"github.com/alcionai/corso/src/cli/utils"
-	"github.com/alcionai/corso/src/pkg/fault"
-	"github.com/alcionai/corso/src/pkg/path"
-	"github.com/alcionai/corso/src/pkg/selectors"
+	"github.com/twyouens/corso/src/cli/flags"
+	. "github.com/twyouens/corso/src/cli/print"
+	"github.com/twyouens/corso/src/cli/utils"
+	"github.com/twyouens/corso/src/pkg/fault"
+	"github.com/twyouens/corso/src/pkg/path"
+	"github.com/twyouens/corso/src/pkg/selectors"
 )
 
 // ------------------------------------------------------------------------------------------------

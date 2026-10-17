@@ -3,8 +3,8 @@ package api
 import (
 	"github.com/microsoftgraph/msgraph-sdk-go/models"
 
-	"github.com/alcionai/corso/src/internal/common/str"
-	"github.com/alcionai/corso/src/internal/common/tform"
+	"github.com/twyouens/corso/src/internal/common/str"
+	"github.com/twyouens/corso/src/internal/common/tform"
 )
 
 type MailboxInfo struct {

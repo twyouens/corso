@@ -6,10 +6,10 @@ import (
 
 	"github.com/alcionai/clues"
 
-	"github.com/alcionai/corso/src/cli/flags"
-	"github.com/alcionai/corso/src/pkg/dttm"
-	"github.com/alcionai/corso/src/pkg/path"
-	"github.com/alcionai/corso/src/pkg/selectors"
+	"github.com/twyouens/corso/src/cli/flags"
+	"github.com/twyouens/corso/src/pkg/dttm"
+	"github.com/twyouens/corso/src/pkg/path"
+	"github.com/twyouens/corso/src/pkg/selectors"
 )
 
 // IsValidTimeFormat returns true if the input is recognized as a

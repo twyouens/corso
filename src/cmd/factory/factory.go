@@ -6,10 +6,10 @@ import (
 
 	"github.com/spf13/cobra"
 
-	. "github.com/alcionai/corso/src/cli/print"
-	"github.com/alcionai/corso/src/cmd/factory/impl"
-	"github.com/alcionai/corso/src/internal/common/crash"
-	"github.com/alcionai/corso/src/pkg/logger"
+	. "github.com/twyouens/corso/src/cli/print"
+	"github.com/twyouens/corso/src/cmd/factory/impl"
+	"github.com/twyouens/corso/src/internal/common/crash"
+	"github.com/twyouens/corso/src/pkg/logger"
 )
 
 var factoryCmd = &cobra.Command{

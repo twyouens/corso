@@ -13,10 +13,10 @@ import (
 	khttp "github.com/microsoft/kiota-http-go"
 	"golang.org/x/exp/slices"
 
-	"github.com/alcionai/corso/src/internal/common/pii"
-	"github.com/alcionai/corso/src/internal/events"
-	"github.com/alcionai/corso/src/pkg/count"
-	"github.com/alcionai/corso/src/pkg/logger"
+	"github.com/twyouens/corso/src/internal/common/pii"
+	"github.com/twyouens/corso/src/internal/events"
+	"github.com/twyouens/corso/src/pkg/count"
+	"github.com/twyouens/corso/src/pkg/logger"
 )
 
 type nexter interface {

@@ -30,7 +30,7 @@ Darwin) GOOS="darwin" ;;
 esac
 
 PLATFORMS="$GOOS/$GOARCH" # default platform
-TAG="alcionai/corso"      # default image tag
+TAG="twyouens/corso"      # default image tag
 
 MODE="binary"
 case "$1" in

@@ -6,8 +6,8 @@ import (
 	"io"
 	"os"
 
-	"github.com/alcionai/corso/src/internal/common/sanitize"
-	"github.com/alcionai/corso/src/pkg/services/m365/api"
+	"github.com/twyouens/corso/src/internal/common/sanitize"
+	"github.com/twyouens/corso/src/pkg/services/m365/api"
 )
 
 func main() {

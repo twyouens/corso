@@ -7,12 +7,12 @@ import (
 	"github.com/alcionai/clues"
 	"golang.org/x/exp/maps"
 
-	"github.com/alcionai/corso/src/internal/data"
-	dataMock "github.com/alcionai/corso/src/internal/data/mock"
-	exchMock "github.com/alcionai/corso/src/internal/m365/service/exchange/mock"
-	"github.com/alcionai/corso/src/pkg/control"
-	"github.com/alcionai/corso/src/pkg/path"
-	"github.com/alcionai/corso/src/pkg/services/m365/api/graph/metadata"
+	"github.com/twyouens/corso/src/internal/data"
+	dataMock "github.com/twyouens/corso/src/internal/data/mock"
+	exchMock "github.com/twyouens/corso/src/internal/m365/service/exchange/mock"
+	"github.com/twyouens/corso/src/pkg/control"
+	"github.com/twyouens/corso/src/pkg/path"
+	"github.com/twyouens/corso/src/pkg/services/m365/api/graph/metadata"
 )
 
 type ColInfo struct {

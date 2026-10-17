@@ -12,11 +12,11 @@ import (
 	"github.com/spf13/cobra"
 	"golang.org/x/exp/maps"
 
-	"github.com/alcionai/corso/src/cmd/s3checker/pkg/s3"
-	"github.com/alcionai/corso/src/internal/common/crash"
-	"github.com/alcionai/corso/src/pkg/config"
-	"github.com/alcionai/corso/src/pkg/logger"
-	"github.com/alcionai/corso/src/pkg/storage"
+	"github.com/twyouens/corso/src/cmd/s3checker/pkg/s3"
+	"github.com/twyouens/corso/src/internal/common/crash"
+	"github.com/twyouens/corso/src/pkg/config"
+	"github.com/twyouens/corso/src/pkg/logger"
+	"github.com/twyouens/corso/src/pkg/storage"
 )
 
 // Matches other definitions of this const.

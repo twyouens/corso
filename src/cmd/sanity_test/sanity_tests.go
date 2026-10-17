@@ -8,12 +8,12 @@ import (
 	"github.com/alcionai/clues"
 	"github.com/spf13/cobra"
 
-	"github.com/alcionai/corso/src/cli/print"
-	"github.com/alcionai/corso/src/cmd/sanity_test/common"
-	"github.com/alcionai/corso/src/cmd/sanity_test/export"
-	"github.com/alcionai/corso/src/cmd/sanity_test/restore"
-	"github.com/alcionai/corso/src/pkg/logger"
-	"github.com/alcionai/corso/src/pkg/services/m365/api/graph"
+	"github.com/twyouens/corso/src/cli/print"
+	"github.com/twyouens/corso/src/cmd/sanity_test/common"
+	"github.com/twyouens/corso/src/cmd/sanity_test/export"
+	"github.com/twyouens/corso/src/cmd/sanity_test/restore"
+	"github.com/twyouens/corso/src/pkg/logger"
+	"github.com/twyouens/corso/src/pkg/services/m365/api/graph"
 )
 
 // ---------------------------------------------------------------------------
