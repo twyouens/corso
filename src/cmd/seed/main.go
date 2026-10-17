@@ -4,10 +4,11 @@
 // writes a seed manifest describing exactly what it put there. Running it
 // twice leaves the tenant unchanged: see src/internal/seed for how.
 //
-// Run it through the workspace's test-tenant credential loader, from the
-// corso repository root:
+// Run it through the workspace's test-tenant credential loader, from
+// src/ (there is no go.mod at the corso repository root, only here -
+// `go run ./src/cmd/seed` from the repository root does not work):
 //
-//	scripts/with-test-tenant.sh go run ./src/cmd/seed
+//	cd src && GO111MODULE=on GOWORK=off <workspace>/scripts/with-test-tenant.sh go run ./cmd/seed
 //
 // This is the one place in this program that reads the process
 // environment; src/internal/seed takes every value as an explicit
@@ -75,7 +76,9 @@ func main() {
 		os.Exit(1)
 	}
 
-	manifest, err := seed.Run(ctx, client, cfg)
+	manifest, err := seed.Run(ctx, client, cfg, func(line string) {
+		fmt.Println(line)
+	})
 	if err != nil {
 		logger.CtxErr(ctx, err).Error("seeding test tenant")
 		logger.Flush(ctx)

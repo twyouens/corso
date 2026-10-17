@@ -13,7 +13,23 @@ import (
 // ManifestSchemaVersion is bumped whenever the shape of Manifest or
 // ManifestItem changes incompatibly. Consumers (0.7's library API tests,
 // 3.5's k3ep tests) should check it before relying on new fields.
-const ManifestSchemaVersion = 1
+//
+// Version history:
+//   - 1: initial schema (chunk 0.3, first round). CreatedAt/ModifiedAt
+//     existed as plain time.Time but were not actually populated by five
+//     of six workloads, and disagreed between a found and a created item
+//     for the sixth - see version 2.
+//   - 2: CreatedAt/ModifiedAt changed from time.Time to *time.Time, and
+//     are now genuinely populated, from the same real Graph
+//     createdDateTime/lastModifiedDateTime, identically whether the item
+//     was found already existing or just created. A consumer checking for
+//     schema version 1 and reading these two fields as non-pointer
+//     time.Time will fail to compile/unmarshal against a version-2
+//     manifest; a consumer written against version 2 must treat a
+//     missing/null CreatedAt or ModifiedAt as "Graph has no date for this
+//     item's kind" (see the field's own doc comment for exactly which
+//     three container kinds that applies to), not as an error.
+const ManifestSchemaVersion = 2
 
 // Workload names the v1 workload a manifest item belongs to. These strings
 // are the contract later chunks assert against; don't rename a value once
@@ -62,9 +78,29 @@ type ManifestItem struct {
 	SizeBytes int64 `json:"size_bytes,omitempty"`
 
 	// CreatedAt and ModifiedAt come straight from Graph's own
-	// createdDateTime/lastModifiedDateTime where the resource has them.
-	CreatedAt  time.Time `json:"created_at,omitempty"`
-	ModifiedAt time.Time `json:"modified_at,omitempty"`
+	// createdDateTime/lastModifiedDateTime, read off the same object
+	// regardless of whether that object was found already existing or
+	// just created - see each seed*() function's FindOrCreate call, which
+	// returns the full Graph object on both paths for exactly this reason.
+	//
+	// Three container kinds have no date at all because Graph itself does
+	// not return one for them: a mail folder (Kind "folder" under
+	// WorkloadExchangeMail), a calendar (Kind "calendar" under
+	// WorkloadExchangeCalendar) and a contacts folder (Kind "folder" under
+	// WorkloadExchangeContacts) all model as a bare Graph Entity, not the
+	// OutlookItem/BaseItem that carries createdDateTime/lastModifiedDateTime.
+	// Every other item in this manifest - messages, events, contacts,
+	// OneDrive folders and files, the SharePoint library and its files,
+	// the SharePoint list and its items - does carry one.
+	//
+	// These are pointers, not plain time.Time, specifically so the three
+	// dateless container kinds can be nil and genuinely omitted from the
+	// JSON: encoding/json's "omitempty" never treats a zero-valued struct
+	// (which time.Time is) as empty, only nil/zero-length/zero-number
+	// values, so a plain time.Time field would always serialise even when
+	// there is no real date to report.
+	CreatedAt  *time.Time `json:"created_at,omitempty"`
+	ModifiedAt *time.Time `json:"modified_at,omitempty"`
 
 	// ResourceID is the ID of the mailbox, drive or site that owns this
 	// item - i.e. Config.UserID, the OneDrive drive ID, or Config.SiteID.

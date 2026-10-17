@@ -41,34 +41,36 @@ var listItemTitles = []string{
 
 // seedSharePoint idempotently ensures the dedicated document library (with
 // its known files) and the dedicated list (with its known items) exist on
-// siteID, and returns a manifest item for each.
-func seedSharePoint(ctx context.Context, c api.Client, siteID string) ([]ManifestItem, error) {
-	libraryItems, err := seedDocumentLibrary(ctx, c, siteID)
+// siteID, and returns a manifest item for each, plus a found-versus-created
+// summary for each of the two SharePoint workloads (library and list).
+func seedSharePoint(ctx context.Context, c api.Client, siteID string) ([]ManifestItem, []WorkloadSummary, error) {
+	libraryItems, librarySummary, err := seedDocumentLibrary(ctx, c, siteID)
 	if err != nil {
-		return nil, clues.Wrap(err, "seeding document library")
+		return nil, nil, clues.Wrap(err, "seeding document library")
 	}
 
-	listItems, err := seedList(ctx, c, siteID)
+	listItems, listSummary, err := seedList(ctx, c, siteID)
 	if err != nil {
-		return nil, clues.Wrap(err, "seeding list")
+		return nil, nil, clues.Wrap(err, "seeding list")
 	}
 
-	return append(libraryItems, listItems...), nil
+	return append(libraryItems, listItems...), []WorkloadSummary{librarySummary, listSummary}, nil
 }
 
-func seedDocumentLibrary(ctx context.Context, c api.Client, siteID string) ([]ManifestItem, error) {
+func seedDocumentLibrary(ctx context.Context, c api.Client, siteID string) ([]ManifestItem, WorkloadSummary, error) {
+	summary := WorkloadSummary{Workload: WorkloadSharePointLibrary}
 	lists := c.Lists()
 	drives := c.Drives()
 
-	driveID, _, err := FindOrCreate(
-		func() (string, bool, error) {
-			found, err := findListByDisplayName(ctx, lists, siteID, libraryName)
+	drive, driveCreated, err := FindOrCreate(
+		func() (models.Driveable, bool, error) {
+			found, err := listByDisplayName(ctx, lists, siteID, libraryName)
 			if err != nil {
-				return "", false, clues.Wrap(err, "looking up seed document library")
+				return nil, false, clues.Wrap(err, "looking up seed document library")
 			}
 
-			if found == "" {
-				return "", false, nil
+			if found == nil {
+				return nil, false, nil
 			}
 
 			drive, err := lists.Stable.
@@ -76,223 +78,252 @@ func seedDocumentLibrary(ctx context.Context, c api.Client, siteID string) ([]Ma
 				Sites().
 				BySiteId(siteID).
 				Lists().
-				ByListId(found).
+				ByListId(ptr.Val(found.GetId())).
 				Drive().
 				Get(ctx, nil)
 			if err != nil {
-				return "", false, clues.Wrap(err, "fetching seed document library drive")
+				return nil, false, clues.Wrap(err, "fetching seed document library drive")
 			}
 
-			return ptr.Val(drive.GetId()), true, nil
+			return drive, true, nil
 		},
-		func() (string, error) {
+		func() (models.Driveable, error) {
 			drive, err := lists.PostDrive(ctx, siteID, libraryName)
 			if err != nil {
-				return "", clues.Wrap(err, "creating seed document library")
+				return nil, clues.Wrap(err, "creating seed document library")
 			}
 
-			return ptr.Val(drive.GetId()), nil
+			return drive, nil
 		})
 	if err != nil {
-		return nil, err
+		return nil, summary, err
 	}
+
+	summary.record(driveCreated)
+
+	driveID := ptr.Val(drive.GetId())
 
 	root, err := drives.GetRootFolder(ctx, driveID)
 	if err != nil {
-		return nil, clues.Wrap(err, "getting seed document library root")
+		return nil, summary, clues.Wrap(err, "getting seed document library root")
 	}
 
 	rootID := ptr.Val(root.GetId())
 
 	existingChildren, err := drives.GetFolderChildren(ctx, driveID, rootID)
 	if err != nil {
-		return nil, clues.Wrap(err, "listing seed document library contents")
+		return nil, summary, clues.Wrap(err, "listing seed document library contents")
 	}
 
-	existingByName := map[string]string{}
-	for _, child := range existingChildren {
-		existingByName[ptr.Val(child.GetName())] = ptr.Val(child.GetId())
-	}
+	existingByName := driveItemsByName(existingChildren)
 
 	items := []ManifestItem{
-		{
-			// The library is implemented on the same Drives client as
-			// OneDrive (a document library is just another drive), but it
-			// is its own workload for manifest purposes.
-			Workload:   WorkloadSharePointLibrary,
-			Kind:       "library",
-			ID:         driveID,
-			Name:       libraryName,
-			ResourceID: siteID,
-		},
+		// The library is implemented on the same Drives client as
+		// OneDrive (a document library is just another drive), but it is
+		// its own workload for manifest purposes.
+		datedManifestItem(
+			drive,
+			WorkloadSharePointLibrary,
+			"library",
+			libraryName,
+			"",
+			0,
+			siteID),
 	}
 
 	for _, want := range libraryFiles {
-		fileID, _, err := FindOrCreate(
-			func() (string, bool, error) {
-				id, found := existingByName[want.name]
-				return id, found, nil
+		file, fileCreated, err := FindOrCreate(
+			func() (models.DriveItemable, bool, error) {
+				f, found := existingByName[want.name]
+				return f, found, nil
 			},
-			func() (string, error) {
+			func() (models.DriveItemable, error) {
 				newFile := api.NewDriveItem(want.name, false)
 
 				created, err := drives.PostItemInContainer(ctx, driveID, rootID, newFile, control.Skip)
 				if AlreadyExists(err) {
 					refreshed, lookupErr := drives.GetFolderChildren(ctx, driveID, rootID)
 					if lookupErr != nil {
-						return "", clues.Wrap(lookupErr, "re-listing seed document library after conflict")
+						return nil, clues.Wrap(lookupErr, "re-listing seed document library after conflict")
 					}
 
 					for _, child := range refreshed {
 						if ptr.Val(child.GetName()) == want.name {
-							return ptr.Val(child.GetId()), nil
+							return child, nil
 						}
 					}
 
-					return "", clues.New(fmt.Sprintf("seed document %q reported a conflict but was not found", want.name))
+					return nil, clues.New(fmt.Sprintf("seed document %q reported a conflict but was not found", want.name))
 				}
 
 				if err != nil {
-					return "", clues.Wrap(err, fmt.Sprintf("creating seed document %q", want.name))
+					return nil, clues.Wrap(err, fmt.Sprintf("creating seed document %q", want.name))
 				}
 
 				id := ptr.Val(created.GetId())
 
 				if err := drives.PutItemContent(ctx, driveID, id, []byte(want.content)); err != nil {
-					return "", clues.Wrap(err, fmt.Sprintf("uploading content for seed document %q", want.name))
+					return nil, clues.Wrap(err, fmt.Sprintf("uploading content for seed document %q", want.name))
 				}
 
-				return id, nil
+				// Re-fetch rather than return created directly, for the
+				// same reason onedrive.go's equivalent file creation
+				// does: Graph bumps lastModifiedDateTime on the content
+				// upload just above, so the pre-upload POST response's
+				// ModifiedAt would go stale the moment a later run finds
+				// this same file instead of creating it.
+				refetched, err := drives.GetItem(ctx, driveID, id)
+				if err != nil {
+					return nil, clues.Wrap(err, fmt.Sprintf("re-fetching seed document %q after upload", want.name))
+				}
+
+				return refetched, nil
 			})
 		if err != nil {
-			return nil, err
+			return nil, summary, err
 		}
 
-		items = append(items, ManifestItem{
-			Workload:   WorkloadSharePointLibrary,
-			Kind:       "file",
-			ID:         fileID,
-			Name:       want.name,
-			FolderPath: libraryName,
-			SizeBytes:  int64(len(want.content)),
-			ResourceID: siteID,
-		})
+		summary.record(fileCreated)
+
+		items = append(items, datedManifestItem(
+			file,
+			WorkloadSharePointLibrary,
+			"file",
+			want.name,
+			libraryName,
+			int64(len(want.content)),
+			siteID))
 	}
 
-	return items, nil
+	return items, summary, nil
 }
 
-func seedList(ctx context.Context, c api.Client, siteID string) ([]ManifestItem, error) {
+func seedList(ctx context.Context, c api.Client, siteID string) ([]ManifestItem, WorkloadSummary, error) {
+	summary := WorkloadSummary{Workload: WorkloadSharePointList}
 	lists := c.Lists()
 
-	listID, _, err := FindOrCreate(
-		func() (string, bool, error) {
-			found, err := findListByDisplayName(ctx, lists, siteID, listName)
+	list, listCreated, err := FindOrCreate(
+		func() (models.Listable, bool, error) {
+			found, err := listByDisplayName(ctx, lists, siteID, listName)
 			if err != nil {
-				return "", false, clues.Wrap(err, "looking up seed list")
+				return nil, false, clues.Wrap(err, "looking up seed list")
 			}
 
-			return found, found != "", nil
+			return found, found != nil, nil
 		},
-		func() (string, error) {
-			list := models.NewList()
-			list.SetDisplayName(ptr.To(listName))
-			list.SetDescription(ptr.To("k3ep seed harness test data; see docs/test-tenant-harness.md"))
+		func() (models.Listable, error) {
+			newList := models.NewList()
+			newList.SetDisplayName(ptr.To(listName))
+			newList.SetDescription(ptr.To("k3ep seed harness test data; see docs/test-tenant-harness.md"))
 
 			info := models.NewListInfo()
 			info.SetTemplate(ptr.To("genericList"))
-			list.SetList(info)
+			newList.SetList(info)
 
 			created, err := lists.Stable.
 				Client().
 				Sites().
 				BySiteId(siteID).
 				Lists().
-				Post(ctx, list, nil)
+				Post(ctx, newList, nil)
 			if err != nil {
-				return "", clues.Wrap(err, "creating seed list")
+				return nil, clues.Wrap(err, "creating seed list")
 			}
 
-			return ptr.Val(created.GetId()), nil
+			return created, nil
 		})
 	if err != nil {
-		return nil, err
+		return nil, summary, err
 	}
 
-	existingTitles, err := listItemIDsByTitle(ctx, lists, siteID, listID)
+	summary.record(listCreated)
+
+	listID := ptr.Val(list.GetId())
+
+	existingTitles, err := listItemsByTitle(ctx, lists, siteID, listID)
 	if err != nil {
-		return nil, clues.Wrap(err, "listing seed list contents")
+		return nil, summary, clues.Wrap(err, "listing seed list contents")
 	}
 
 	items := []ManifestItem{
-		{
-			Workload:   WorkloadSharePointList,
-			Kind:       "list",
-			ID:         listID,
-			Name:       listName,
-			ResourceID: siteID,
-		},
+		datedManifestItem(
+			list,
+			WorkloadSharePointList,
+			"list",
+			listName,
+			"",
+			0,
+			siteID),
 	}
 
 	for _, title := range listItemTitles {
-		itemID, _, err := FindOrCreate(
-			func() (string, bool, error) {
-				id, found := existingTitles[title]
-				return id, found, nil
+		li, liCreated, err := FindOrCreate(
+			func() (models.ListItemable, bool, error) {
+				item, found := existingTitles[title]
+				return item, found, nil
 			},
-			func() (string, error) {
+			func() (models.ListItemable, error) {
 				fields := models.NewFieldValueSet()
 				fields.SetAdditionalData(map[string]any{"Title": title})
 
-				li := models.NewListItem()
-				li.SetFields(fields)
+				newItem := models.NewListItem()
+				newItem.SetFields(fields)
 
-				if err := lists.PostListItems(ctx, siteID, listID, []models.ListItemable{li}); err != nil {
-					return "", clues.Wrap(err, fmt.Sprintf("creating seed list item %q", title))
-				}
-
-				// PostListItems doesn't hand back the created item's ID, so
-				// look it up by the title we just wrote.
-				refreshed, err := listItemIDsByTitle(ctx, lists, siteID, listID)
+				// Posting through api.Lists.PostListItems and then
+				// re-listing to find the new item's ID (as an earlier
+				// version of this function did) is unreliable: a live run
+				// against the real test tenant proved that re-querying
+				// immediately after creation can miss the just-written
+				// item - SharePoint list item field indexing is
+				// eventually, not immediately, consistent. Posting
+				// directly and reading the ID straight off the creation
+				// response avoids that race entirely.
+				created, err := lists.Stable.
+					Client().
+					Sites().
+					BySiteId(siteID).
+					Lists().
+					ByListId(listID).
+					Items().
+					Post(ctx, newItem, nil)
 				if err != nil {
-					return "", clues.Wrap(err, "re-listing seed list after creating item")
+					return nil, clues.Wrap(err, fmt.Sprintf("creating seed list item %q", title))
 				}
 
-				id, found := refreshed[title]
-				if !found {
-					return "", clues.New(fmt.Sprintf("seed list item %q not found after creation", title))
-				}
-
-				return id, nil
+				return created, nil
 			})
 		if err != nil {
-			return nil, err
+			return nil, summary, err
 		}
 
-		items = append(items, ManifestItem{
-			Workload:   WorkloadSharePointList,
-			Kind:       "list_item",
-			ID:         itemID,
-			Name:       title,
-			FolderPath: listName,
-			ResourceID: siteID,
-		})
+		summary.record(liCreated)
+
+		items = append(items, datedManifestItem(
+			li,
+			WorkloadSharePointList,
+			"list_item",
+			title,
+			listName,
+			0,
+			siteID))
 	}
 
-	return items, nil
+	return items, summary, nil
 }
 
-// findListByDisplayName returns the ID of the list on siteID whose
-// DisplayName matches name, or "" if none matches. api.Lists has no
-// "find list by name" wrapper (only GetListByID, which needs an ID the
-// seeder doesn't have yet on a fresh tenant), so this lists every list on
-// the site and matches client-side - sites rarely have more than a
-// handful, so this is cheap.
-func findListByDisplayName(
+// listByDisplayName returns the list on siteID whose DisplayName matches
+// name, or nil if none matches. api.Lists has no "find list by name"
+// wrapper (only GetListByID, which needs an ID the seeder doesn't have yet
+// on a fresh tenant), so this lists every list on the site and matches
+// client-side - sites rarely have more than a handful, so this is cheap.
+// Returning the full object (rather than just its ID, as an earlier
+// version of this function did) is what lets seedDocumentLibrary/seedList
+// read real Graph dates on the "found" path, not just the "created" one.
+func listByDisplayName(
 	ctx context.Context,
 	lists api.Lists,
 	siteID, name string,
-) (string, error) {
+) (models.Listable, error) {
 	resp, err := lists.Stable.
 		Client().
 		Sites().
@@ -300,34 +331,45 @@ func findListByDisplayName(
 		Lists().
 		Get(ctx, nil)
 	if err != nil {
-		return "", clues.Wrap(err, "listing site lists")
+		return nil, clues.Wrap(err, "listing site lists")
 	}
 
-	for _, l := range resp.GetValue() {
+	return listMatchingDisplayName(resp.GetValue(), name), nil
+}
+
+// listMatchingDisplayName returns the first list in lists whose
+// DisplayName equals name, or nil. Split out from listByDisplayName so the
+// matching logic - the actual idempotency decision input - is
+// unit-testable without a Graph call.
+func listMatchingDisplayName(lists []models.Listable, name string) models.Listable {
+	for _, l := range lists {
 		if ptr.Val(l.GetDisplayName()) == name {
-			return ptr.Val(l.GetId()), nil
+			return l
 		}
 	}
 
-	return "", nil
+	return nil
 }
 
-// listItemIDsByTitle returns a Title->id map of every item currently in
+// listItemsByTitle returns a Title->item map of every item currently in
 // listID, by fetching each item's Fields sub-resource directly (the public
 // GetListItems wrapper does not populate Fields; only the package-private
 // getListItemFields does, so this mirrors that call through the same
-// exported Stable escape hatch used elsewhere in this file).
-func listItemIDsByTitle(
+// exported Stable escape hatch used elsewhere in this file). The returned
+// ListItemable comes from GetListItems itself, which does carry
+// createdDateTime/lastModifiedDateTime, so both the found and the created
+// path in seedList read real Graph dates.
+func listItemsByTitle(
 	ctx context.Context,
 	lists api.Lists,
 	siteID, listID string,
-) (map[string]string, error) {
+) (map[string]models.ListItemable, error) {
 	existing, err := lists.GetListItems(ctx, siteID, listID, api.CallConfig{})
 	if err != nil {
 		return nil, clues.Wrap(err, "getting list items")
 	}
 
-	out := map[string]string{}
+	out := map[string]models.ListItemable{}
 
 	for _, li := range existing {
 		id := ptr.Val(li.GetId())
@@ -346,10 +388,33 @@ func listItemIDsByTitle(
 			return nil, clues.Wrap(err, "getting list item fields")
 		}
 
-		if title, ok := fields.GetAdditionalData()["Title"].(string); ok {
-			out[title] = id
+		if title, ok := stringAdditionalDataValue(fields.GetAdditionalData()["Title"]); ok {
+			out[title] = li
 		}
 	}
 
 	return out, nil
+}
+
+// stringAdditionalDataValue extracts a string value from a Kiota
+// AdditionalData map entry. A live run against the real test tenant proved
+// this cannot be a plain type assertion to string: Kiota deserialises
+// recognised scalar values in AdditionalData as pointers (*string here, for
+// Title), not the bare value, so `v.(string)` always failed, the "already
+// seeded" check in listItemsByTitle was always empty, and every seeder run
+// created a fresh duplicate list item instead of finding the one from the
+// run before. This helper accepts either shape.
+func stringAdditionalDataValue(v any) (string, bool) {
+	switch t := v.(type) {
+	case string:
+		return t, true
+	case *string:
+		if t == nil {
+			return "", false
+		}
+
+		return *t, true
+	default:
+		return "", false
+	}
 }

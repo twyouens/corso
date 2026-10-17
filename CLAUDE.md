@@ -13,7 +13,7 @@ All Go commands run from `src/`.
 | Lint | `cd src && golangci-lint run` (verify config in src/.golangci.yml) |
 | Everything CI runs | `cd src && make check` (added by chunk 0.2) |
 | Integration tests (test tenant) | `scripts/with-test-tenant.sh make -C worktrees/corso-<chunk-id>/src test-integration` from the workspace root. Scoped to `./internal/seed/...` only - the test-tenant harness's own smoke test (chunk 0.3), not the pre-existing backup/restore integration suites elsewhere in this repo, which target a different (Alcion) test tenant and belong to chunks 0.5-0.7. |
-| Seed the test tenant | `scripts/with-test-tenant.sh go run ./src/cmd/seed` (added by chunk 0.3) |
+| Seed the test tenant | `cd src && GO111MODULE=on GOWORK=off <workspace>/scripts/with-test-tenant.sh go run ./cmd/seed` (added by chunk 0.3; must run from `src/` - there is no `go.mod` at this repository's root) |
 | Build-check without the workspace | `cd src && GOWORK=off go build ./... && GOWORK=off go test ./...` |
 
 This machine's global Go configuration sets `GO111MODULE=off`; every command above needs `GO111MODULE=on` set explicitly alongside `GOWORK=off`, or module resolution silently falls back to GOPATH mode and every import fails to resolve. Several agents have lost time to this.

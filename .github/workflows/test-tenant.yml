@@ -1,0 +1,88 @@
+name: Test tenant (manual)
+
+# Runs the test-tenant integration harness (src/internal/seed) against the
+# real Microsoft 365 test tenant. Separate from ci.yml's `check` job, which
+# never touches the test tenant and runs on every pull request.
+#
+# This is deliberately manual-trigger only, with no schedule. The user has
+# chosen to keep the test tenant's credentials off GitHub entirely - they
+# are never configured as repository secrets. Without them, a scheduled
+# run would fail every single time, and a permanently-red scheduled job is
+# noise everyone learns to ignore, which defeats the point of having one.
+# See docs/test-tenant-harness.md ("Where integration tests actually run")
+# for the real arrangement: against the real tenant, these tests run
+# locally, on demand, via scripts/with-test-tenant.sh. This workflow is a
+# shape check and a manual entry point for the day credentials are made
+# available to it (e.g. a self-hosted runner with local network access to
+# the tenant), not an automated verification that the harness works
+# against real Graph - nothing in CI proves that.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: test-tenant-${{ github.workflow }}
+  cancel-in-progress: true
+
+jobs:
+  test-integration:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: src
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Golang with cache
+        uses: ./.github/actions/go-setup-cache
+        with:
+          go-version-file: src/go.mod
+
+      - name: Seed and run the test-tenant integration suite
+        env:
+          # Credentials: repository secrets, never a file in this
+          # repository. As of this chunk, none are configured - this step
+          # is expected to fail the credential check below until a human
+          # decides to provide them (and, per the note above, the user has
+          # decided not to for now). If any of these three is missing,
+          # src/internal/seed reports its exact name (never a value) and
+          # the step below fails with that message rather than a stack
+          # trace.
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+          # Not credentials - the existing, already-licensed test user and
+          # existing SharePoint site the harness seeds dedicated, prefixed
+          # folders into. Repository variables (not secrets) because they
+          # are plain identifiers, not sensitive values.
+          SEED_USER_ID: ${{ vars.SEED_USER_ID }}
+          SEED_SITE_ID: ${{ vars.SEED_SITE_ID }}
+        run: |
+          # set -o pipefail matters here: without it, this step's exit code
+          # is tee's (always 0), not make's, so the job would report success
+          # even when the suite genuinely failed. A live workflow_dispatch
+          # run against the real test tenant (with no secrets configured
+          # yet) proved exactly this: the step showed green while the log
+          # underneath it read "make: *** [test-integration] Error 1".
+          set -o pipefail
+          mkdir -p testlog
+          GOWORK=off make test-integration 2>&1 | tee testlog/test-tenant.log
+
+      - name: Upload test log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-tenant-log
+          path: src/testlog/*
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "### Test tenant run (manual trigger)" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "Job status: ${{ job.status }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "See the uploaded log artifact for full output." >> "$GITHUB_STEP_SUMMARY"

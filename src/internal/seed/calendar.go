@@ -35,11 +35,13 @@ var calendarEvents = []struct {
 }
 
 // seedCalendar idempotently ensures the dedicated calendar and its known
-// events exist in userID's mailbox, and returns a manifest item for each.
-func seedCalendar(ctx context.Context, c api.Client, userID string) ([]ManifestItem, error) {
+// events exist in userID's mailbox, and returns a manifest item for each,
+// plus how many of each were found versus freshly created.
+func seedCalendar(ctx context.Context, c api.Client, userID string) ([]ManifestItem, WorkloadSummary, error) {
+	summary := WorkloadSummary{Workload: WorkloadExchangeCalendar}
 	events := c.Events()
 
-	calendar, _, err := FindOrCreate(
+	calendar, calCreated, err := FindOrCreate(
 		func() (graph.Container, bool, error) {
 			found, err := events.GetContainerByName(ctx, userID, "", calendarName)
 			if err == nil {
@@ -57,14 +59,20 @@ func seedCalendar(ctx context.Context, c api.Client, userID string) ([]ManifestI
 			return created, clues.Wrap(err, "creating seed calendar").OrNil()
 		})
 	if err != nil {
-		return nil, err
+		return nil, summary, err
 	}
+
+	summary.record(calCreated)
 
 	calendarID := ptr.Val(calendar.GetId())
 
-	existing, err := listEventIDsBySubject(ctx, events, userID, calendarID)
+	// Calendar, like MailFolder and ContactFolder, has no
+	// createdDateTime/lastModifiedDateTime in Graph at all (its model
+	// embeds Entity, not OutlookItem), so the calendar's manifest item
+	// below is correctly dateless; there is nothing to read.
+	existing, err := listEventsBySubject(ctx, events, userID, calendarID)
 	if err != nil {
-		return nil, clues.Wrap(err, "listing seed calendar contents")
+		return nil, summary, clues.Wrap(err, "listing seed calendar contents")
 	}
 
 	items := []ManifestItem{
@@ -78,12 +86,12 @@ func seedCalendar(ctx context.Context, c api.Client, userID string) ([]ManifestI
 	}
 
 	for _, want := range calendarEvents {
-		evID, created, err := FindOrCreate(
-			func() (string, bool, error) {
-				id, found := existing[want.subject]
-				return id, found, nil
+		ev, evCreated, err := FindOrCreate(
+			func() (models.Eventable, bool, error) {
+				e, found := existing[want.subject]
+				return e, found, nil
 			},
-			func() (string, error) {
+			func() (models.Eventable, error) {
 				start := want.startFrom
 				end := start.Add(want.duration)
 
@@ -95,50 +103,62 @@ func seedCalendar(ctx context.Context, c api.Client, userID string) ([]ManifestI
 				endTZ.SetDateTime(ptr.To(dttm.Format(end)))
 				endTZ.SetTimeZone(ptr.To("UTC"))
 
-				ev := models.NewEvent()
-				ev.SetSubject(ptr.To(want.subject))
-				ev.SetStart(startTZ)
-				ev.SetEnd(endTZ)
+				newEv := models.NewEvent()
+				newEv.SetSubject(ptr.To(want.subject))
+				newEv.SetStart(startTZ)
+				newEv.SetEnd(endTZ)
 
-				posted, err := events.PostItem(ctx, userID, calendarID, ev)
+				posted, err := events.PostItem(ctx, userID, calendarID, newEv)
 				if err != nil {
-					return "", clues.Wrap(err, fmt.Sprintf("creating seed event %q", want.subject))
+					return nil, clues.Wrap(err, fmt.Sprintf("creating seed event %q", want.subject))
 				}
 
-				return ptr.Val(posted.GetId()), nil
+				return posted, nil
 			})
 		if err != nil {
-			return nil, err
+			return nil, summary, err
 		}
 
-		item := ManifestItem{
-			Workload:   WorkloadExchangeCalendar,
-			Kind:       "event",
-			ID:         evID,
-			Name:       want.subject,
-			FolderPath: calendarName,
-			ResourceID: userID,
-		}
+		summary.record(evCreated)
 
-		if created {
-			item.CreatedAt = time.Now().UTC()
-		}
-
-		items = append(items, item)
+		items = append(items, datedManifestItem(
+			ev,
+			WorkloadExchangeCalendar,
+			"event",
+			want.subject,
+			calendarName,
+			0,
+			userID))
 	}
 
-	return items, nil
+	return items, summary, nil
 }
 
-// listEventIDsBySubject returns a subject->id map of the events already in
-// calendarID, so SeedCalendar can decide per-event whether to create it.
-// api.Events has no "list events" wrapper (only GetItem-by-ID and PostItem),
-// so this uses the same raw-client escape hatch as listMessageIDsBySubject.
-func listEventIDsBySubject(
+// eventsBySubject builds a subject->event map from an already-fetched
+// slice of events. Split out from listEventsBySubject so the map-building
+// logic - the actual idempotency decision input - is unit-testable without
+// a Graph call.
+func eventsBySubject(evs []models.Eventable) map[string]models.Eventable {
+	out := map[string]models.Eventable{}
+
+	for _, ev := range evs {
+		out[ptr.Val(ev.GetSubject())] = ev
+	}
+
+	return out
+}
+
+// listEventsBySubject returns a subject->event map of the events already in
+// calendarID, so seedCalendar can decide per-event whether to create it,
+// and - whether found or freshly created - read the same real Graph dates
+// either way. api.Events has no "list events" wrapper (only GetItem-by-ID
+// and PostItem), so this uses the same raw-client escape hatch as
+// listMessagesBySubject.
+func listEventsBySubject(
 	ctx context.Context,
 	events api.Events,
 	userID, calendarID string,
-) (map[string]string, error) {
+) (map[string]models.Eventable, error) {
 	resp, err := events.Stable.
 		Client().
 		Users().
@@ -148,18 +168,12 @@ func listEventIDsBySubject(
 		Events().
 		Get(ctx, &users.ItemCalendarsItemEventsRequestBuilderGetRequestConfiguration{
 			QueryParameters: &users.ItemCalendarsItemEventsRequestBuilderGetQueryParameters{
-				Select: []string{"id", "subject"},
+				Select: []string{"id", "subject", "createdDateTime", "lastModifiedDateTime"},
 			},
 		})
 	if err != nil {
 		return nil, clues.Wrap(err, "listing events")
 	}
 
-	out := map[string]string{}
-
-	for _, ev := range resp.GetValue() {
-		out[ptr.Val(ev.GetSubject())] = ptr.Val(ev.GetId())
-	}
-
-	return out, nil
+	return eventsBySubject(resp.GetValue()), nil
 }

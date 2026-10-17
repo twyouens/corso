@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/alcionai/clues"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
@@ -81,16 +82,28 @@ func (suite *SeedHarnessIntgSuite) TestRun_SeedsTenantAndIsIdempotent() {
 	client, err := api.NewClient(creds, control.DefaultOptions(), count.New())
 	require.NoError(t, err, clues.ToCore(err))
 
+	// report makes the resolved target identity and each workload's
+	// found-versus-created tally visible in `go test -v`'s output, so
+	// anyone re-running this test themselves can check it against what a
+	// result report claims, without this test ever logging an item's
+	// name, subject, filename or a credential.
+	report := func(line string) { t.Log(line) }
+
 	// First run: seeds the tenant (or finds everything already there from a
 	// previous run) and writes the manifest.
-	first, err := Run(ctx, client, cfg)
+	t.Log("--- first run ---")
+
+	first, err := Run(ctx, client, cfg, report)
 	require.NoError(t, err, clues.ToCore(err))
 
 	requireExpectedWorkloads(t, first)
+	requireDatesPopulatedWhereExpected(t, first)
 
 	// Second run, same config: Done-when #2's live proof. If this seeder
 	// is genuinely idempotent, nothing but GeneratedAt differs.
-	second, err := Run(ctx, client, cfg)
+	t.Log("--- second run ---")
+
+	second, err := Run(ctx, client, cfg, report)
 	require.NoError(t, err, clues.ToCore(err))
 
 	require.Equal(t, first.TenantID, second.TenantID)
@@ -118,5 +131,45 @@ func requireExpectedWorkloads(t *testing.T, m Manifest) {
 		WorkloadSharePointList,
 	} {
 		require.NotEmpty(t, m.ItemsByWorkload(w), "expected at least one seeded item for workload %q", w)
+	}
+}
+
+// requireDatesPopulatedWhereExpected is the live proof for this chunk's
+// must-fix: every manifest item that Graph actually returns a
+// createdDateTime for must have a non-zero CreatedAt, whether it was found
+// or freshly created. The only items exempt are the three lightweight
+// Exchange containers (mail folder, calendar, contacts folder), which
+// genuinely have no createdDateTime/lastModifiedDateTime in Graph at all
+// (see mail.go/calendar.go/contacts.go's comments on their Entity-only
+// models) - everything else, including the messages/events/contacts
+// inside them, is expected to carry a real date.
+func requireDatesPopulatedWhereExpected(t *testing.T, m Manifest) {
+	for _, item := range m.Items {
+		if isDatelessContainer(item) {
+			continue
+		}
+
+		if assert.NotNil(t, item.CreatedAt,
+			"%s %s %q should carry a real CreatedAt", item.Workload, item.Kind, item.Name) {
+			assert.False(t, item.CreatedAt.IsZero())
+		}
+
+		if assert.NotNil(t, item.ModifiedAt,
+			"%s %s %q should carry a real ModifiedAt", item.Workload, item.Kind, item.Name) {
+			assert.False(t, item.ModifiedAt.IsZero())
+		}
+	}
+}
+
+func isDatelessContainer(item ManifestItem) bool {
+	switch item.Workload {
+	case WorkloadExchangeMail:
+		return item.Kind == "folder"
+	case WorkloadExchangeCalendar:
+		return item.Kind == "calendar"
+	case WorkloadExchangeContacts:
+		return item.Kind == "folder"
+	default:
+		return false
 	}
 }
