@@ -151,7 +151,7 @@ func addFlags(fs *pflag.FlagSet, defaultFile string) {
 // displayed as part of the help/usage output.
 func PreloadLoggingFlags(args []string) Settings {
 	fs := pflag.NewFlagSet("seed-logger", pflag.ContinueOnError)
-	fs.ParseErrorsWhitelist.UnknownFlags = true
+	fs.ParseErrorsAllowlist.UnknownFlags = true
 	addFlags(fs, "")
 
 	// prevents overriding the corso/cobra help processor

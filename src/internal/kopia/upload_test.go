@@ -13,7 +13,7 @@ import (
 	"github.com/kopia/kopia/fs/virtualfs"
 	"github.com/kopia/kopia/repo/manifest"
 	"github.com/kopia/kopia/snapshot"
-	"github.com/kopia/kopia/snapshot/snapshotfs"
+	"github.com/kopia/kopia/snapshot/upload"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -373,12 +373,12 @@ func (suite *CorsoProgressUnitSuite) TestFinishedFile() {
 
 					bd := &details.Builder{}
 					cp := corsoProgress{
-						ctx:            ctx,
-						UploadProgress: &snapshotfs.NullUploadProgress{},
-						deets:          bd,
-						toMerge:        newMergeDetails(),
-						pending:        map[string]*itemDetails{},
-						errs:           fault.New(true),
+						ctx:      ctx,
+						Progress: &upload.NullUploadProgress{},
+						deets:    bd,
+						toMerge:  newMergeDetails(),
+						pending:  map[string]*itemDetails{},
+						errs:     fault.New(true),
 					}
 
 					ci := test.cachedItems(suite.targetFileName, suite.targetFilePath)
@@ -472,11 +472,11 @@ func (suite *CorsoProgressUnitSuite) TestFinishedFileCachedNoPrevPathErrors() {
 		},
 	}
 	cp := corsoProgress{
-		ctx:            ctx,
-		UploadProgress: &snapshotfs.NullUploadProgress{},
-		deets:          bd,
-		pending:        map[string]*itemDetails{},
-		errs:           fault.New(true),
+		ctx:      ctx,
+		Progress: &upload.NullUploadProgress{},
+		deets:    bd,
+		pending:  map[string]*itemDetails{},
+		errs:     fault.New(true),
 	}
 
 	for k, v := range cachedItems {
@@ -522,12 +522,12 @@ func (suite *CorsoProgressUnitSuite) TestFinishedFileBaseItemDoesntBuildHierarch
 	// Setup stuff.
 	db := &details.Builder{}
 	cp := corsoProgress{
-		ctx:            ctx,
-		UploadProgress: &snapshotfs.NullUploadProgress{},
-		deets:          db,
-		pending:        map[string]*itemDetails{},
-		toMerge:        newMergeDetails(),
-		errs:           fault.New(true),
+		ctx:      ctx,
+		Progress: &upload.NullUploadProgress{},
+		deets:    db,
+		pending:  map[string]*itemDetails{},
+		toMerge:  newMergeDetails(),
+		errs:     fault.New(true),
 	}
 
 	deets := &itemDetails{
@@ -565,12 +565,12 @@ func (suite *CorsoProgressUnitSuite) TestFinishedHashingFile() {
 
 			bd := &details.Builder{}
 			cp := corsoProgress{
-				ctx:            ctx,
-				UploadProgress: &snapshotfs.NullUploadProgress{},
-				deets:          bd,
-				pending:        map[string]*itemDetails{},
-				errs:           fault.New(true),
-				counter:        count.New(),
+				ctx:      ctx,
+				Progress: &upload.NullUploadProgress{},
+				deets:    bd,
+				pending:  map[string]*itemDetails{},
+				errs:     fault.New(true),
+				counter:  count.New(),
 			}
 
 			ci := test.cachedItems(suite.targetFileName, suite.targetFilePath)

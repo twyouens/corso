@@ -43,7 +43,7 @@ func AddProgressBarFlags(cmd *cobra.Command) {
 // AddProgressBarFlag() ensures the flags are displayed as part of the help/usage output.
 func PreloadFlags() config {
 	fs := pflag.NewFlagSet("seed-observer", pflag.ContinueOnError)
-	fs.ParseErrorsWhitelist.UnknownFlags = true
+	fs.ParseErrorsAllowlist.UnknownFlags = true
 	fs.Bool(hideProgressBarsFN, false, "turn off the progress bar displays")
 	fs.Bool(retainProgressBarsFN, false, "retain the progress bar displays after completion")
 	// prevents overriding the corso/cobra help processor

@@ -519,11 +519,15 @@ func (suite *BasicKopiaIntegrationSuite) TestConsumeBackupCollections_SetsSource
 // ---------------
 // integration tests that require object locking to be enabled on the bucket.
 // ---------------
-func mustGetBlobConfig(t *testing.T, c *conn) format.BlobStorageConfiguration {
+func mustGetBlobConfig(
+	t *testing.T,
+	ctx context.Context, //revive:disable-line:context-as-argument
+	c *conn,
+) format.BlobStorageConfiguration {
 	require.Implements(t, (*repo.DirectRepository)(nil), c.Repository)
 	dr := c.Repository.(repo.DirectRepository)
 
-	blobCfg, err := dr.FormatManager().BlobCfgBlob()
+	blobCfg, err := dr.FormatManager().BlobCfgBlob(ctx)
 	require.NoError(t, err, "getting repo config blob")
 
 	return blobCfg
@@ -537,7 +541,7 @@ func checkRetentionParams(
 	expectDuration time.Duration,
 	expectExtend assert.BoolAssertionFunc,
 ) {
-	blobCfg := mustGetBlobConfig(t, c)
+	blobCfg := mustGetBlobConfig(t, ctx, c)
 
 	assert.Equal(t, expectMode, blobCfg.RetentionMode, "retention mode")
 	// Empty mode isn't considered valid so only check if it's non-empty.

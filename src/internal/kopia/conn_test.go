@@ -808,10 +808,10 @@ func (suite *ConnRetentionIntegrationSuite) TestInitWithAndWithoutRetention() {
 
 	assert.Equal(t, format1, format2)
 
-	blobCfg1, err := dr1.FormatManager().BlobCfgBlob()
+	blobCfg1, err := dr1.FormatManager().BlobCfgBlob(ctx)
 	require.NoError(t, err, "getting blob config 1: %v", clues.ToCore(err))
 
-	blobCfg2, err := dr2.FormatManager().BlobCfgBlob()
+	blobCfg2, err := dr2.FormatManager().BlobCfgBlob(ctx)
 	require.NoError(t, err, "getting retention config 2: %v", clues.ToCore(err))
 
 	assert.NotEqual(t, blobCfg1, blobCfg2)

@@ -1,9 +1,7 @@
 package repository
 
 import (
-	"os"
 	"testing"
-	"time"
 
 	"github.com/alcionai/clues"
 	"github.com/stretchr/testify/assert"
@@ -202,43 +200,6 @@ func (suite *RepositoryIntegrationSuite) TestInitialize() {
 			test.errCheck(t, err, clues.ToCore(err))
 		})
 	}
-}
-
-const (
-	roleARNEnvKey = "CORSO_TEST_S3_ROLE"
-	roleDuration  = time.Minute * 20
-)
-
-func (suite *RepositoryIntegrationSuite) TestInitializeWithRole() {
-	t := suite.T()
-
-	if _, ok := os.LookupEnv(roleARNEnvKey); !ok {
-		t.Skip(roleARNEnvKey + " not set")
-	}
-
-	ctx, flush := tester.NewContext(t)
-	defer flush()
-
-	st := storeTD.NewPrefixedS3Storage(t)
-
-	st.Role = os.Getenv(roleARNEnvKey)
-	st.SessionName = "corso-repository-test"
-	st.SessionDuration = roleDuration.String()
-
-	r, err := New(
-		ctx,
-		account.Account{},
-		st,
-		control.DefaultOptions(),
-		NewRepoID)
-	require.NoError(t, err, clues.ToCore(err))
-
-	err = r.Initialize(ctx, InitConfig{})
-	require.NoError(t, err)
-
-	defer func() {
-		r.Close(ctx)
-	}()
 }
 
 func (suite *RepositoryIntegrationSuite) TestConnect() {

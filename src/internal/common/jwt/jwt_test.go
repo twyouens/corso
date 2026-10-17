@@ -37,7 +37,14 @@ const (
 		"IiwiaXNsb29wYmFjayI6IlRydWUiLCJ2ZXIiOiJoYXNoZWRwcm9vZnRva2VuIiwicm9sZXMiOiJhbGxmaWxl" +
 		"cy53cml0ZSBhbGxzaXRlcy5mdWxsY29udHJvbCBhbGxwcm9maWxlcy5yZWFkIiwidHQiOiIxIiwiYWxnIjoi" +
 		"SFMyNTYifQ" +
-		".signature"
+		// Placeholder signature segment, not a real one. Base64url-encodes to
+		// a valid (if meaningless) segment rather than the literal word
+		// "signature": golang-jwt v5.3.1's ParseUnverified started
+		// base64-decoding the signature segment too (v5.2.0 did not), so an
+		// actually-invalid-base64 placeholder now fails to parse even though
+		// this test only exercises claim extraction, not signature
+		// verification.
+		".c2lnbmF0dXJl"
 )
 
 func (suite *JWTUnitSuite) TestIsJWTExpired() {

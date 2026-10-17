@@ -547,7 +547,7 @@ func getRetentionConfigs(
 	ctx context.Context,
 	dr repo.DirectRepository,
 ) (*format.BlobStorageConfiguration, *maintenance.Params, error) {
-	blobCfg, err := dr.FormatManager().BlobCfgBlob()
+	blobCfg, err := dr.FormatManager().BlobCfgBlob(ctx)
 	if err != nil {
 		return nil, nil, clues.WrapWC(ctx, err, "getting storage config")
 	}
@@ -575,12 +575,12 @@ func persistRetentionConfigs(
 		return clues.Stack(err)
 	}
 
-	mp, err := dr.FormatManager().GetMutableParameters()
+	mp, err := dr.FormatManager().GetMutableParameters(ctx)
 	if err != nil {
 		return clues.WrapWC(ctx, err, "getting mutable parameters")
 	}
 
-	requiredFeatures, err := dr.FormatManager().RequiredFeatures()
+	requiredFeatures, err := dr.FormatManager().RequiredFeatures(ctx)
 	if err != nil {
 		return clues.WrapWC(ctx, err, "getting required features")
 	}
@@ -680,14 +680,14 @@ func (w *conn) getPersistentConfig(
 
 	formatManager := directRepo.FormatManager()
 
-	mutableParams, err := formatManager.GetMutableParameters()
+	mutableParams, err := formatManager.GetMutableParameters(ctx)
 	if err != nil {
 		return format.MutableParameters{},
 			format.BlobStorageConfiguration{},
 			clues.WrapWC(ctx, err, "getting mutable parameters")
 	}
 
-	blobCfg, err := formatManager.BlobCfgBlob()
+	blobCfg, err := formatManager.BlobCfgBlob(ctx)
 	if err != nil {
 		return format.MutableParameters{},
 			format.BlobStorageConfiguration{},
@@ -714,7 +714,7 @@ func (w *conn) updatePersistentConfig(
 		return clues.Stack(err)
 	}
 
-	reqFeatures, err := formatManager.RequiredFeatures()
+	reqFeatures, err := formatManager.RequiredFeatures(ctx)
 	if err != nil {
 		return clues.WrapWC(ctx, err, "getting required features")
 	}

@@ -14,6 +14,7 @@ import (
 	"github.com/kopia/kopia/fs"
 	"github.com/kopia/kopia/fs/virtualfs"
 	"github.com/kopia/kopia/snapshot/snapshotfs"
+	"github.com/kopia/kopia/snapshot/upload"
 	"golang.org/x/exp/maps"
 
 	"github.com/twyouens/corso/src/internal/common/prefixmatcher"
@@ -47,7 +48,13 @@ type corsoProgress struct {
 	// for logging and other purposes.
 	ctx context.Context
 
-	snapshotfs.UploadProgress
+	// Embedded anonymously (as it was pre-upgrade) so corsoProgress gets the
+	// rest of upstream's interface for free via promotion; only the methods
+	// below are overridden. Upstream renamed this interface from
+	// snapshotfs.UploadProgress to upload.Progress and moved it, along with
+	// the Uploader type, out of the snapshotfs package into its own
+	// snapshot/upload package.
+	upload.Progress
 	pending map[string]*itemDetails
 	// deets contains entries that are complete and don't need merged with base
 	// backup data at all.
@@ -78,7 +85,7 @@ func (cp *corsoProgress) incExpectedErrs() {
 // file.
 func (cp *corsoProgress) FinishedFile(relativePath string, err error) {
 	// Pass the call through as well so we don't break expected functionality.
-	defer cp.UploadProgress.FinishedFile(relativePath, err)
+	defer cp.Progress.FinishedFile(relativePath, err)
 	// Whether it succeeded or failed, remove the entry from our pending set so we
 	// don't leak references.
 	defer func() {
@@ -169,7 +176,7 @@ func (cp *corsoProgress) FinishedFile(relativePath string, err error) {
 // Kopia interface function used as a callback when kopia finishes hashing a file.
 func (cp *corsoProgress) FinishedHashingFile(fname string, bs int64) {
 	// Pass the call through as well so we don't break expected functionality.
-	defer cp.UploadProgress.FinishedHashingFile(fname, bs)
+	defer cp.Progress.FinishedHashingFile(fname, bs)
 
 	sl := strings.Split(fname, "/")
 
@@ -196,7 +203,7 @@ func (cp *corsoProgress) FinishedHashingFile(fname string, bs int64) {
 // uploaded file that matches the current file and skips uploading the new
 // (duplicate) version.
 func (cp *corsoProgress) CachedFile(fname string, size int64) {
-	defer cp.UploadProgress.CachedFile(fname, size)
+	defer cp.Progress.CachedFile(fname, size)
 
 	d := cp.get(fname)
 	if d == nil {
@@ -223,7 +230,7 @@ func (cp *corsoProgress) Error(relpath string, err error, isIgnored bool) {
 		return
 	}
 
-	defer cp.UploadProgress.Error(relpath, err, isIgnored)
+	defer cp.Progress.Error(relpath, err, isIgnored)
 
 	cp.errs.AddRecoverable(cp.ctx, clues.Wrap(err, "kopia reported error").
 		With("is_ignored", isIgnored, "relative_path", relpath).
