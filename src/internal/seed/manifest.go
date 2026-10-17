@@ -29,7 +29,16 @@ import (
 //     missing/null CreatedAt or ModifiedAt as "Graph has no date for this
 //     item's kind" (see the field's own doc comment for exactly which
 //     three container kinds that applies to), not as an error.
-const ManifestSchemaVersion = 2
+//   - 3: added ManifestItem.Recurrence (nil except on the one recurring
+//     calendar event, Kind "event_recurring") and a new Kind,
+//     "event_exception", for that series' one exception occurrence as its
+//     own top-level item. Purely additive - every field from version 2
+//     keeps its meaning, and a consumer that ignores unknown JSON fields
+//     and never asks for Kind "event_recurring"/"event_exception" is
+//     unaffected - but bumped anyway per this constant's own rule, since a
+//     consumer that *does* want to assert against a recurring series
+//     needs to know this version is the first one where that's possible.
+const ManifestSchemaVersion = 3
 
 // Workload names the v1 workload a manifest item belongs to. These strings
 // are the contract later chunks assert against; don't rename a value once
@@ -105,6 +114,41 @@ type ManifestItem struct {
 	// ResourceID is the ID of the mailbox, drive or site that owns this
 	// item - i.e. Config.UserID, the OneDrive drive ID, or Config.SiteID.
 	ResourceID string `json:"resource_id"`
+
+	// Recurrence is non-nil only for the one recurring calendar event
+	// this package seeds (Workload WorkloadExchangeCalendar, Kind
+	// "event_recurring"). See RecurrenceDetail.
+	Recurrence *RecurrenceDetail `json:"recurrence,omitempty"`
+}
+
+// RecurrenceDetail records what a later chunk needs in order to assert
+// "listing a seeded mailbox matches the seed manifest" against a
+// recurring series, not just its series master: which occurrence Graph
+// no longer returns at all (cancelled), and which occurrence Graph
+// returns with different content (an exception). Both fields are read
+// through the typed Eventable.GetCancelledOccurrences()/
+// GetExceptionOccurrences() fields the Graph SDK v1.104.0 upgrade (chunk
+// 0.5) promoted out of AdditionalData - this manifest entry is the thing
+// that actually exercises that migration against real Graph data, since
+// every other seeded event is a single non-recurring occurrence.
+type RecurrenceDetail struct {
+	// CancelledOccurrenceIDs are this series'
+	// Eventable.GetCancelledOccurrences() entries exactly as Graph returns
+	// them (format "<seriesId>.<occurrenceStartDateTime>"). A later chunk
+	// listing this calendar should find none of these IDs as a visible
+	// event - that is what "cancelled" means. Always length 1 for this
+	// seeded series (one deliberately cancelled occurrence), but a slice
+	// because that is Graph's actual shape for the field.
+	CancelledOccurrenceIDs []string `json:"cancelled_occurrence_ids"`
+
+	// ExceptionOccurrenceIDs are the Graph IDs of this series'
+	// Eventable.GetExceptionOccurrences() entries. Each one is also
+	// present as its own ManifestItem (Kind "event_exception") elsewhere
+	// in Manifest.Items, with its own Name/CreatedAt/ModifiedAt, so it can
+	// be asserted against directly like any other item - this field is
+	// just the index pointing at it. Always length 1 for this seeded
+	// series, for the same reason as CancelledOccurrenceIDs.
+	ExceptionOccurrenceIDs []string `json:"exception_occurrence_ids"`
 }
 
 // Manifest is the machine-readable record of everything the seeder put in

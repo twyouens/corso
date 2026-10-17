@@ -82,7 +82,11 @@ It then creates (or, on a later run, finds and reuses) in `SEED_USER_ID`'s
 mailbox and OneDrive:
 
 - a mail folder `k3ep-seed-mail` with two known messages,
-- a calendar `k3ep-seed-calendar` with one known event,
+- a calendar `k3ep-seed-calendar` with one known non-recurring event
+  (`k3ep-seed-event-001`) and one known recurring series
+  (`k3ep-seed-event-recurring-001`, five daily occurrences, one
+  cancelled, one turned into an exception - see
+  [The recurring calendar event](#the-recurring-calendar-event) below),
 - a contacts folder `k3ep-seed-contacts` with one known contact,
 - a OneDrive folder `k3ep-seed` with three known files,
 
@@ -97,10 +101,10 @@ and workload names only, never an item's name, subject, filename or a
 credential:
 
 ```
-exchange-mail: 2 found, 0 created
-exchange-calendar: 1 found, 0 created
-exchange-contacts: 1 found, 0 created
-onedrive: 3 found, 1 created
+exchange-mail: 3 found, 0 created
+exchange-calendar: 3 found, 0 created
+exchange-contacts: 2 found, 0 created
+onedrive: 4 found, 0 created
 sharepoint-library: 2 found, 0 created
 sharepoint-list: 3 found, 0 created
 ```
@@ -127,7 +131,7 @@ afterwards. Schema (`src/internal/seed/manifest.go`):
 
 ```json
 {
-  "schema_version": 2,
+  "schema_version": 3,
   "generated_at": "2026-01-01T04:00:00Z",
   "tenant_id": "...",
   "prefix": "k3ep-seed",
@@ -201,12 +205,20 @@ way the mocked test assumes it does.
   populated them, and the sixth (calendar) only set one on the created
   branch - a found item and a created item disagreed. Not a usable
   contract; nothing should have depended on it, and nothing did.
-- **2** (current): `CreatedAt`/`ModifiedAt` are `*time.Time` and
-  genuinely populated as described above. A consumer written against
-  version 1's non-pointer field will not compile/unmarshal against a
-  version-2 manifest. A consumer written against version 2 must treat a
+- **2**: `CreatedAt`/`ModifiedAt` are `*time.Time` and genuinely
+  populated as described above. A consumer written against version 1's
+  non-pointer field will not compile/unmarshal against a version-2
+  manifest. A consumer written against version 2 must treat a
   missing/null date as "this item's kind has no date in Graph" (the three
   container kinds above), not as an error.
+- **3** (current): added `ManifestItem.Recurrence` (non-nil only on the
+  one recurring calendar event, `kind: "event_recurring"`) and a new
+  `kind`, `"event_exception"`, for that series' one exception occurrence
+  as its own top-level item - see
+  [The recurring calendar event](#the-recurring-calendar-event) below.
+  Purely additive: every version-2 field keeps its meaning, and a
+  consumer that ignores unknown JSON fields and never asks for either new
+  `kind` is unaffected.
 
 Items are always sorted the same way (by workload, then folder path, then
 name, then ID) before being written, so two manifests from two runs that
@@ -216,6 +228,74 @@ Later chunks assert against this file directly
 (`src/internal/seed.LoadManifest`): 0.7's acceptance is "listing a seeded
 mailbox matches the seed manifest", and 3.5's is "results match the seed
 manifest".
+
+### The recurring calendar event
+
+Chunk 0.5 upgraded the Graph SDK from v1.30.0 to v1.104.0, which promoted
+`Event.CancelledOccurrences`/`ExceptionOccurrences` from beta-only
+`AdditionalData` entries to typed SDK fields, and deleted the old
+map-parsing code that used to read them. Nothing exercised that migration
+against real Graph data until this addition: every other seeded event is
+a single, non-recurring occurrence, so the typed fields were never
+actually populated by anything this harness seeded.
+
+`k3ep-seed-event-recurring-001` is a short daily series (five
+occurrences) in `k3ep-seed-calendar`. The seeder cancels one occurrence
+(a `DELETE` on that occurrence's own instance ID - Microsoft's documented
+mechanism for cancelling a single occurrence of a recurring event, and a
+legitimate operation on a series this harness created; not a workaround,
+and the only delete anywhere in this package) and modifies a different
+occurrence into an exception (a `PATCH` on its instance ID, changing only
+its subject). Both actions happen once, inside the series' own
+`FindOrCreate` create branch, so a later run that finds the series
+already existing does not repeat them.
+
+The series master appears in the manifest as:
+
+```json
+{
+  "workload": "exchange-calendar",
+  "kind": "event_recurring",
+  "id": "AAMk...",
+  "name": "k3ep-seed-event-recurring-001",
+  "folder_path": "k3ep-seed-calendar",
+  "created_at": "2026-01-01T03:58:12Z",
+  "modified_at": "2026-01-01T03:58:13Z",
+  "resource_id": "<SEED_USER_ID>",
+  "recurrence": {
+    "cancelled_occurrence_ids": ["OID.AAMk....2026-01-03"],
+    "exception_occurrence_ids": ["AAMk..."]
+  }
+}
+```
+
+`recurrence.cancelled_occurrence_ids` is `Eventable.GetCancelledOccurrences()`
+exactly as Graph returns it - a later chunk listing this calendar should
+find none of these IDs as a visible event. `recurrence.exception_occurrence_ids`
+is the Graph ID of each `Eventable.GetExceptionOccurrences()` entry; each one
+is *also* present as its own top-level item, `kind: "event_exception"`,
+with its own `created_at`/`modified_at` (read off the exception occurrence's
+own Graph object, not the series master's), so it can be asserted against
+directly like any other item:
+
+```json
+{
+  "workload": "exchange-calendar",
+  "kind": "event_exception",
+  "id": "AAMk...",
+  "name": "k3ep-seed-event-recurring-001 (exception)",
+  "folder_path": "k3ep-seed-calendar",
+  "created_at": "2026-01-01T03:58:13Z",
+  "modified_at": "2026-01-01T03:58:14Z",
+  "resource_id": "<SEED_USER_ID>"
+}
+```
+
+`smoke_test.go`'s `requireRecurringEventReadsTypedOccurrences` is the
+assertion that actually exercises the migration: it requires both
+`cancelled_occurrence_ids` and `exception_occurrence_ids` non-empty on a
+live run, and fails if the typed-field read were ever broken or reverted
+to the old `AdditionalData` path.
 
 ## Running the integration tests locally
 

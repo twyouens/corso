@@ -98,6 +98,7 @@ func (suite *SeedHarnessIntgSuite) TestRun_SeedsTenantAndIsIdempotent() {
 
 	requireExpectedWorkloads(t, first)
 	requireDatesPopulatedWhereExpected(t, first)
+	requireRecurringEventReadsTypedOccurrences(t, first)
 
 	// Second run, same config: Done-when #2's live proof. If this seeder
 	// is genuinely idempotent, nothing but GeneratedAt differs.
@@ -159,6 +160,59 @@ func requireDatesPopulatedWhereExpected(t *testing.T, m Manifest) {
 			assert.False(t, item.ModifiedAt.IsZero())
 		}
 	}
+}
+
+// requireRecurringEventReadsTypedOccurrences is this chunk's entire point:
+// chunk 0.5 upgraded the Graph SDK from v1.30.0 to v1.104.0, promoting
+// Event.CancelledOccurrences/ExceptionOccurrences from beta-only
+// AdditionalData entries to typed fields, and deleted the old
+// api.EventFromMap/parseableToMap map-parsing code as dead. Nothing
+// exercised that migration against real Graph data, because every
+// seeded event before this chunk was a single non-recurring occurrence -
+// the live calendar never contained a cancellation or an exception for
+// the typed fields to carry. This assertion reads the one recurring
+// series this chunk adds and requires both fields non-empty; if the
+// typed-field migration were broken, or ever reverted to reading
+// AdditionalData directly, Eventable.GetCancelledOccurrences()/
+// GetExceptionOccurrences() would come back empty and this fails.
+func requireRecurringEventReadsTypedOccurrences(t *testing.T, m Manifest) {
+	var series *ManifestItem
+
+	for i, item := range m.Items {
+		if item.Workload == WorkloadExchangeCalendar && item.Kind == "event_recurring" {
+			series = &m.Items[i]
+			break
+		}
+	}
+
+	if !assert.NotNil(t, series, "expected a seeded recurring calendar event (Kind %q)", "event_recurring") {
+		return
+	}
+
+	if !assert.NotNil(t, series.Recurrence,
+		"seeded recurring event %q should carry RecurrenceDetail", series.Name) {
+		return
+	}
+
+	assert.NotEmpty(t, series.Recurrence.CancelledOccurrenceIDs,
+		"Eventable.GetCancelledOccurrences() should be non-empty - "+
+			"the typed field the Graph SDK v1.104.0 upgrade promoted this out of AdditionalData")
+	assert.NotEmpty(t, series.Recurrence.ExceptionOccurrenceIDs,
+		"Eventable.GetExceptionOccurrences() should be non-empty - "+
+			"the typed field the Graph SDK v1.104.0 upgrade promoted this out of AdditionalData")
+
+	// The exception occurrence should also be present as its own item,
+	// not just referenced by ID in RecurrenceDetail.
+	found := false
+
+	for _, item := range m.Items {
+		if item.Workload == WorkloadExchangeCalendar && item.Kind == "event_exception" {
+			found = true
+			break
+		}
+	}
+
+	assert.True(t, found, "expected the seeded exception occurrence as its own manifest item (Kind %q)", "event_exception")
 }
 
 func isDatelessContainer(item ManifestItem) bool {
