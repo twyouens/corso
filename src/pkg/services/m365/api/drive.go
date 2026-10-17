@@ -272,7 +272,7 @@ func (c Drives) PostItemPermissionUpdate(
 	ctx context.Context,
 	driveID, itemID string,
 	body *drives.ItemItemsItemInvitePostRequestBody,
-) (drives.ItemItemsItemInviteResponseable, error) {
+) (drives.ItemItemsItemInvitePostResponseable, error) {
 	ctx = graph.ConsumeNTokens(ctx, graph.PermissionsLC)
 
 	itm, err := c.Stable.
@@ -282,7 +282,7 @@ func (c Drives) PostItemPermissionUpdate(
 		Items().
 		ByDriveItemId(itemID).
 		Invite().
-		Post(ctx, body, nil)
+		PostAsInvitePostResponse(ctx, body, nil)
 
 	return itm, clues.Wrap(err, "posting permissions").OrNil()
 }
