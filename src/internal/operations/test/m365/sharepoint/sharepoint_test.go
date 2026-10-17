@@ -11,23 +11,22 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
-	"github.com/alcionai/corso/src/internal/common/ptr"
-	evmock "github.com/alcionai/corso/src/internal/events/mock"
-	"github.com/alcionai/corso/src/internal/m365/collection/drive"
-	. "github.com/alcionai/corso/src/internal/operations/test/m365"
-	"github.com/alcionai/corso/src/internal/tester"
-	"github.com/alcionai/corso/src/internal/tester/its"
-	"github.com/alcionai/corso/src/internal/tester/tconfig"
-	"github.com/alcionai/corso/src/internal/version"
-	deeTD "github.com/alcionai/corso/src/pkg/backup/details/testdata"
-	"github.com/alcionai/corso/src/pkg/control"
-	ctrlTD "github.com/alcionai/corso/src/pkg/control/testdata"
-	"github.com/alcionai/corso/src/pkg/count"
-	"github.com/alcionai/corso/src/pkg/path"
-	"github.com/alcionai/corso/src/pkg/selectors"
-	selTD "github.com/alcionai/corso/src/pkg/selectors/testdata"
-	"github.com/alcionai/corso/src/pkg/services/m365/api"
-	storeTD "github.com/alcionai/corso/src/pkg/storage/testdata"
+	"github.com/twyouens/corso/src/internal/common/ptr"
+	"github.com/twyouens/corso/src/internal/m365/collection/drive"
+	. "github.com/twyouens/corso/src/internal/operations/test/m365"
+	"github.com/twyouens/corso/src/internal/tester"
+	"github.com/twyouens/corso/src/internal/tester/its"
+	"github.com/twyouens/corso/src/internal/tester/tconfig"
+	"github.com/twyouens/corso/src/internal/version"
+	deeTD "github.com/twyouens/corso/src/pkg/backup/details/testdata"
+	"github.com/twyouens/corso/src/pkg/control"
+	ctrlTD "github.com/twyouens/corso/src/pkg/control/testdata"
+	"github.com/twyouens/corso/src/pkg/count"
+	"github.com/twyouens/corso/src/pkg/path"
+	"github.com/twyouens/corso/src/pkg/selectors"
+	selTD "github.com/twyouens/corso/src/pkg/selectors/testdata"
+	"github.com/twyouens/corso/src/pkg/services/m365/api"
+	storeTD "github.com/twyouens/corso/src/pkg/storage/testdata"
 )
 
 type SharePointBackupIntgSuite struct {
@@ -72,7 +71,6 @@ func (suite *SharePointBackupIntgSuite) TestBackup_Run_sharePointList() {
 		resourceID = suite.m365.Site.ID
 		sel        = selectors.NewSharePointBackup([]string{resourceID})
 		tenID      = tconfig.M365TenantID(t)
-		mb         = evmock.NewBus()
 		counter    = count.New()
 		ws         = deeTD.CategoryFromRepoRef
 	)
@@ -82,14 +80,13 @@ func (suite *SharePointBackupIntgSuite) TestBackup_Run_sharePointList() {
 	bo, bod := PrepNewTestBackupOp(
 		t,
 		ctx,
-		mb,
 		sel.Selector,
 		control.DefaultOptions(),
 		version.Backup,
 		counter)
 	defer bod.Close(t, ctx)
 
-	RunAndCheckBackup(t, ctx, &bo, mb, false)
+	RunAndCheckBackup(t, ctx, &bo, false)
 	CheckBackupIsInManifests(
 		t,
 		ctx,
@@ -375,7 +372,6 @@ func (suite *SharePointRestoreNightlyIntgSuite) TestRestore_Run_sharepointDelete
 
 	// run a backup
 	var (
-		mb          = evmock.NewBus()
 		counter     = count.New()
 		opts        = control.DefaultOptions()
 		graphClient = suite.m365.AC.Stable.Client()
@@ -386,10 +382,10 @@ func (suite *SharePointRestoreNightlyIntgSuite) TestRestore_Run_sharepointDelete
 	bsel.Filter(bsel.Library(rc.Location))
 	bsel.DiscreteOwner = suite.m365.Site.ID
 
-	bo, bod := PrepNewTestBackupOp(t, ctx, mb, bsel.Selector, opts, version.Backup, counter)
+	bo, bod := PrepNewTestBackupOp(t, ctx, bsel.Selector, opts, version.Backup, counter)
 	defer bod.Close(t, ctx)
 
-	RunAndCheckBackup(t, ctx, &bo, mb, false)
+	RunAndCheckBackup(t, ctx, &bo, false)
 
 	// test cases:
 
@@ -413,7 +409,6 @@ func (suite *SharePointRestoreNightlyIntgSuite) TestRestore_Run_sharepointDelete
 		require.NoError(t, err, clues.ToCore(err))
 
 		var (
-			mb  = evmock.NewBus()
 			ctr = count.New()
 		)
 
@@ -422,13 +417,12 @@ func (suite *SharePointRestoreNightlyIntgSuite) TestRestore_Run_sharepointDelete
 			ctx,
 			bod.St,
 			bo.Results.BackupID,
-			mb,
 			ctr,
 			bod.Sel,
 			opts,
 			rc)
 
-		RunAndCheckRestore(t, ctx, &ro, mb, false)
+		RunAndCheckRestore(t, ctx, &ro, false)
 		assert.Equal(t, 1, ctr.Get(count.NewItemCreated), "restored an item")
 
 		resp, err := graphClient.
@@ -464,7 +458,6 @@ func (suite *SharePointRestoreNightlyIntgSuite) TestRestore_Run_sharepointDelete
 		require.NoError(t, err, clues.ToCore(err))
 
 		var (
-			mb  = evmock.NewBus()
 			ctr = count.New()
 		)
 
@@ -473,13 +466,12 @@ func (suite *SharePointRestoreNightlyIntgSuite) TestRestore_Run_sharepointDelete
 			ctx,
 			bod.St,
 			bo.Results.BackupID,
-			mb,
 			ctr,
 			bod.Sel,
 			opts,
 			rc)
 
-		RunAndCheckRestore(t, ctx, &ro, mb, false)
+		RunAndCheckRestore(t, ctx, &ro, false)
 		assert.Equal(t, 1, ctr.Get(count.NewItemCreated), "restored an item")
 
 		pgr := suite.m365.AC.
@@ -532,7 +524,6 @@ func (suite *SharePointRestoreNightlyIntgSuite) TestRestore_Run_sharepointDelete
 		defer flush()
 
 		var (
-			mb  = evmock.NewBus()
 			ctr = count.New()
 		)
 
@@ -541,13 +532,12 @@ func (suite *SharePointRestoreNightlyIntgSuite) TestRestore_Run_sharepointDelete
 			ctx,
 			bod.St,
 			bo.Results.BackupID,
-			mb,
 			ctr,
 			bod.Sel,
 			opts,
 			rc)
 
-		RunAndCheckRestore(t, ctx, &ro, mb, false)
+		RunAndCheckRestore(t, ctx, &ro, false)
 
 		assert.Equal(t, 1, ctr.Get(count.NewItemCreated), "restored an item")
 

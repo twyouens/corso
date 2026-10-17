@@ -5,12 +5,11 @@ import (
 
 	"github.com/alcionai/clues"
 
-	"github.com/alcionai/corso/src/internal/events"
-	"github.com/alcionai/corso/src/internal/kopia"
-	"github.com/alcionai/corso/src/pkg/control"
-	"github.com/alcionai/corso/src/pkg/count"
-	"github.com/alcionai/corso/src/pkg/fault"
-	"github.com/alcionai/corso/src/pkg/store"
+	"github.com/twyouens/corso/src/internal/kopia"
+	"github.com/twyouens/corso/src/pkg/control"
+	"github.com/twyouens/corso/src/pkg/count"
+	"github.com/twyouens/corso/src/pkg/fault"
+	"github.com/twyouens/corso/src/pkg/store"
 )
 
 // OpStatus describes the current status of an operation.
@@ -55,14 +54,12 @@ type operation struct {
 	Options control.Options `json:"options"`
 	Status  OpStatus        `json:"status"`
 
-	bus   events.Eventer
 	kopia *kopia.Wrapper
 	store store.BackupStorer
 }
 
 func newOperation(
 	opts control.Options,
-	bus events.Eventer,
 	ctr *count.Bus,
 	kw *kopia.Wrapper,
 	sw store.BackupStorer,
@@ -73,7 +70,6 @@ func newOperation(
 		Counter:   ctr,
 		Options:   opts,
 
-		bus:   bus,
 		kopia: kw,
 		store: sw,
 

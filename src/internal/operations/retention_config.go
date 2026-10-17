@@ -6,13 +6,12 @@ import (
 
 	"github.com/alcionai/clues"
 
-	"github.com/alcionai/corso/src/internal/common/crash"
-	"github.com/alcionai/corso/src/internal/events"
-	"github.com/alcionai/corso/src/internal/kopia"
-	"github.com/alcionai/corso/src/internal/stats"
-	"github.com/alcionai/corso/src/pkg/control"
-	"github.com/alcionai/corso/src/pkg/control/repository"
-	"github.com/alcionai/corso/src/pkg/count"
+	"github.com/twyouens/corso/src/internal/common/crash"
+	"github.com/twyouens/corso/src/internal/kopia"
+	"github.com/twyouens/corso/src/internal/stats"
+	"github.com/twyouens/corso/src/pkg/control"
+	"github.com/twyouens/corso/src/pkg/control/repository"
+	"github.com/twyouens/corso/src/pkg/count"
 )
 
 // RetentionConfigOperation wraps an operation with restore-specific props.
@@ -34,10 +33,9 @@ func NewRetentionConfigOperation(
 	opts control.Options,
 	kw *kopia.Wrapper,
 	rcOpts repository.Retention,
-	bus events.Eventer,
 ) (RetentionConfigOperation, error) {
 	op := RetentionConfigOperation{
-		operation: newOperation(opts, bus, count.New(), kw, nil),
+		operation: newOperation(opts, count.New(), kw, nil),
 		rcOpts:    rcOpts,
 	}
 
@@ -54,8 +52,6 @@ func (op *RetentionConfigOperation) Run(ctx context.Context) (err error) {
 	}()
 
 	op.Results.StartedAt = time.Now()
-
-	// TODO(ashmrtn): Send telemetry?
 
 	return op.do(ctx)
 }

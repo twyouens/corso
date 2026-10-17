@@ -7,19 +7,19 @@ import (
 	"github.com/kopia/kopia/repo/manifest"
 	"github.com/pkg/errors"
 
-	"github.com/alcionai/corso/src/internal/common/idname"
-	"github.com/alcionai/corso/src/internal/data"
-	"github.com/alcionai/corso/src/internal/kopia"
-	"github.com/alcionai/corso/src/internal/model"
-	"github.com/alcionai/corso/src/internal/operations"
-	"github.com/alcionai/corso/src/internal/streamstore"
-	"github.com/alcionai/corso/src/internal/version"
-	"github.com/alcionai/corso/src/pkg/backup"
-	"github.com/alcionai/corso/src/pkg/backup/details"
-	"github.com/alcionai/corso/src/pkg/fault"
-	"github.com/alcionai/corso/src/pkg/selectors"
-	"github.com/alcionai/corso/src/pkg/services/m365/api/graph/metadata"
-	"github.com/alcionai/corso/src/pkg/store"
+	"github.com/twyouens/corso/src/internal/common/idname"
+	"github.com/twyouens/corso/src/internal/data"
+	"github.com/twyouens/corso/src/internal/kopia"
+	"github.com/twyouens/corso/src/internal/model"
+	"github.com/twyouens/corso/src/internal/operations"
+	"github.com/twyouens/corso/src/internal/streamstore"
+	"github.com/twyouens/corso/src/internal/version"
+	"github.com/twyouens/corso/src/pkg/backup"
+	"github.com/twyouens/corso/src/pkg/backup/details"
+	"github.com/twyouens/corso/src/pkg/fault"
+	"github.com/twyouens/corso/src/pkg/selectors"
+	"github.com/twyouens/corso/src/pkg/services/m365/api/graph/metadata"
+	"github.com/twyouens/corso/src/pkg/store"
 )
 
 // BackupGetter deals with retrieving metadata about backups from the
@@ -93,7 +93,6 @@ func (r repository) NewBackupWithLookup(
 		r.Account,
 		sel,
 		sel, // the selector acts as an IDNamer for its discrete resource owner.
-		r.Bus,
 		r.counter)
 }
 

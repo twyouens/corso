@@ -1,8 +1,8 @@
 package control
 
 import (
-	"github.com/alcionai/corso/src/pkg/control/repository"
-	"github.com/alcionai/corso/src/pkg/extensions"
+	"github.com/twyouens/corso/src/pkg/control/repository"
+	"github.com/twyouens/corso/src/pkg/extensions"
 )
 
 // Options holds the optional configurations for a process
@@ -10,7 +10,6 @@ type Options struct {
 	// DeltaPageSize controls the quantity of items fetched in each page
 	// during multi-page queries, such as graph api delta endpoints.
 	DeltaPageSize        int32                              `json:"deltaPageSize"`
-	DisableMetrics       bool                               `json:"disableMetrics"`
 	FailureHandling      FailurePolicy                      `json:"failureHandling"`
 	ItemExtensionFactory []extensions.CreateItemExtensioner `json:"-"`
 	Parallelism          Parallelism                        `json:"parallelism"`
@@ -103,7 +102,7 @@ type Toggles struct {
 	// bucket rate limiter.
 	DisableSlidingWindowLimiter bool `json:"disableSlidingWindowLimiter"`
 
-	// see: https://github.com/alcionai/corso/issues/4688
+	// see: https://github.com/twyouens/corso/issues/4688
 	UseDeltaTree       bool `json:"useDeltaTree"`
 	UseOldDeltaProcess bool `json:"useOldDeltaProcess"`
 

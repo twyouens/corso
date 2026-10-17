@@ -9,8 +9,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
-	"github.com/alcionai/corso/src/cli/flags"
-	"github.com/alcionai/corso/src/internal/tester"
+	"github.com/twyouens/corso/src/cli/flags"
+	"github.com/twyouens/corso/src/internal/tester"
 )
 
 type OptionsUnitSuite struct {
@@ -31,7 +31,6 @@ func (suite *OptionsUnitSuite) TestAddExchangeCommands() {
 			assert.True(t, flags.DisableIncrementalsFV, flags.DisableIncrementalsFN)
 			assert.True(t, flags.ForceItemDataDownloadFV, flags.ForceItemDataDownloadFN)
 			assert.True(t, flags.DisableDeltaFV, flags.DisableDeltaFN)
-			assert.True(t, flags.NoStatsFV, flags.NoStatsFN)
 			assert.True(t, flags.NoPermissionsFV, flags.NoPermissionsFN)
 			assert.True(t, flags.SkipReduceFV, flags.SkipReduceFN)
 			assert.Equal(t, 2, flags.FetchParallelismFV, flags.FetchParallelismFN)
@@ -39,9 +38,6 @@ func (suite *OptionsUnitSuite) TestAddExchangeCommands() {
 			assert.True(t, flags.DisableSlidingWindowLimiterFV, flags.DisableSlidingWindowLimiterFN)
 		},
 	}
-
-	// adds no-stats
-	flags.AddGlobalOperationFlags(cmd)
 
 	flags.AddFailFastFlag(cmd)
 	flags.AddDisableIncrementalsFlag(cmd)
@@ -60,7 +56,6 @@ func (suite *OptionsUnitSuite) TestAddExchangeCommands() {
 		"--" + flags.DisableIncrementalsFN,
 		"--" + flags.ForceItemDataDownloadFN,
 		"--" + flags.DisableDeltaFN,
-		"--" + flags.NoStatsFN,
 		"--" + flags.NoPermissionsFN,
 		"--" + flags.SkipReduceFN,
 		"--" + flags.FetchParallelismFN, "2",

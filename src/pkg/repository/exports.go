@@ -5,11 +5,11 @@ import (
 
 	"github.com/alcionai/clues"
 
-	"github.com/alcionai/corso/src/internal/model"
-	"github.com/alcionai/corso/src/internal/operations"
-	"github.com/alcionai/corso/src/pkg/control"
-	"github.com/alcionai/corso/src/pkg/selectors"
-	"github.com/alcionai/corso/src/pkg/store"
+	"github.com/twyouens/corso/src/internal/model"
+	"github.com/twyouens/corso/src/internal/operations"
+	"github.com/twyouens/corso/src/pkg/control"
+	"github.com/twyouens/corso/src/pkg/selectors"
+	"github.com/twyouens/corso/src/pkg/store"
 )
 
 type Exporter interface {
@@ -42,6 +42,5 @@ func (r repository) NewExport(
 		r.Account,
 		model.StableID(backupID),
 		sel,
-		exportCfg,
-		r.Bus)
+		exportCfg)
 }

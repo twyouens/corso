@@ -7,34 +7,33 @@ import (
 	"github.com/alcionai/clues"
 	"github.com/google/uuid"
 
-	"github.com/alcionai/corso/src/internal/common/crash"
-	"github.com/alcionai/corso/src/internal/common/idname"
-	"github.com/alcionai/corso/src/internal/common/prefixmatcher"
-	"github.com/alcionai/corso/src/internal/data"
-	"github.com/alcionai/corso/src/internal/diagnostics"
-	"github.com/alcionai/corso/src/internal/events"
-	"github.com/alcionai/corso/src/internal/kopia"
-	kinject "github.com/alcionai/corso/src/internal/kopia/inject"
-	"github.com/alcionai/corso/src/internal/model"
-	"github.com/alcionai/corso/src/internal/observe"
-	"github.com/alcionai/corso/src/internal/operations/inject"
-	"github.com/alcionai/corso/src/internal/stats"
-	"github.com/alcionai/corso/src/internal/streamstore"
-	"github.com/alcionai/corso/src/internal/version"
-	"github.com/alcionai/corso/src/pkg/account"
-	"github.com/alcionai/corso/src/pkg/backup"
-	"github.com/alcionai/corso/src/pkg/backup/details"
-	"github.com/alcionai/corso/src/pkg/backup/identity"
-	"github.com/alcionai/corso/src/pkg/control"
-	"github.com/alcionai/corso/src/pkg/count"
-	"github.com/alcionai/corso/src/pkg/dttm"
-	"github.com/alcionai/corso/src/pkg/errs/core"
-	"github.com/alcionai/corso/src/pkg/fault"
-	"github.com/alcionai/corso/src/pkg/logger"
-	"github.com/alcionai/corso/src/pkg/path"
-	"github.com/alcionai/corso/src/pkg/selectors"
-	"github.com/alcionai/corso/src/pkg/services/m365/api/graph"
-	"github.com/alcionai/corso/src/pkg/store"
+	"github.com/twyouens/corso/src/internal/common/crash"
+	"github.com/twyouens/corso/src/internal/common/idname"
+	"github.com/twyouens/corso/src/internal/common/prefixmatcher"
+	"github.com/twyouens/corso/src/internal/data"
+	"github.com/twyouens/corso/src/internal/diagnostics"
+	"github.com/twyouens/corso/src/internal/events"
+	"github.com/twyouens/corso/src/internal/kopia"
+	kinject "github.com/twyouens/corso/src/internal/kopia/inject"
+	"github.com/twyouens/corso/src/internal/model"
+	"github.com/twyouens/corso/src/internal/observe"
+	"github.com/twyouens/corso/src/internal/operations/inject"
+	"github.com/twyouens/corso/src/internal/stats"
+	"github.com/twyouens/corso/src/internal/streamstore"
+	"github.com/twyouens/corso/src/internal/version"
+	"github.com/twyouens/corso/src/pkg/account"
+	"github.com/twyouens/corso/src/pkg/backup"
+	"github.com/twyouens/corso/src/pkg/backup/details"
+	"github.com/twyouens/corso/src/pkg/backup/identity"
+	"github.com/twyouens/corso/src/pkg/control"
+	"github.com/twyouens/corso/src/pkg/count"
+	"github.com/twyouens/corso/src/pkg/errs/core"
+	"github.com/twyouens/corso/src/pkg/fault"
+	"github.com/twyouens/corso/src/pkg/logger"
+	"github.com/twyouens/corso/src/pkg/path"
+	"github.com/twyouens/corso/src/pkg/selectors"
+	"github.com/twyouens/corso/src/pkg/services/m365/api/graph"
+	"github.com/twyouens/corso/src/pkg/store"
 )
 
 // BackupOperation wraps an operation with backup-specific props.
@@ -83,11 +82,10 @@ func NewBackupOperation(
 	acct account.Account,
 	selector selectors.Selector,
 	owner idname.Provider,
-	bus events.Eventer,
 	counter *count.Bus,
 ) (BackupOperation, error) {
 	op := BackupOperation{
-		operation:           newOperation(opts, bus, counter, kw, sw),
+		operation:           newOperation(opts, counter, kw, sw),
 		ResourceOwner:       owner,
 		Selectors:           selector,
 		Version:             "v0",
@@ -267,22 +265,6 @@ func (op *BackupOperation) Run(ctx context.Context) (err error) {
 		"categories", cats,
 		"incremental", op.incremental,
 		"disable_assist_backup", op.disableAssistBackup)
-
-	defer func() {
-		op.bus.Event(
-			ctx,
-			events.BackupEnd,
-			map[string]any{
-				events.BackupID:   op.Results.BackupID,
-				events.DataStored: op.Results.BytesUploaded,
-				events.Duration:   op.Results.CompletedAt.Sub(op.Results.StartedAt),
-				events.EndTime:    dttm.Format(op.Results.CompletedAt),
-				events.Resources:  op.Results.ResourceOwners,
-				events.Service:    op.Selectors.PathService().String(),
-				events.StartTime:  dttm.Format(op.Results.StartedAt),
-				events.Status:     op.Status.String(),
-			})
-	}()
 
 	// -----
 	// Execution

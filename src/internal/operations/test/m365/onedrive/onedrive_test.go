@@ -10,29 +10,27 @@ import (
 	"github.com/stretchr/testify/suite"
 	"golang.org/x/exp/maps"
 
-	"github.com/alcionai/corso/src/internal/common/ptr"
-	"github.com/alcionai/corso/src/internal/events"
-	evmock "github.com/alcionai/corso/src/internal/events/mock"
-	m365Ctrl "github.com/alcionai/corso/src/internal/m365"
-	"github.com/alcionai/corso/src/internal/m365/collection/drive"
-	"github.com/alcionai/corso/src/internal/model"
-	. "github.com/alcionai/corso/src/internal/operations/test/m365"
-	"github.com/alcionai/corso/src/internal/streamstore"
-	"github.com/alcionai/corso/src/internal/tester"
-	"github.com/alcionai/corso/src/internal/tester/its"
-	"github.com/alcionai/corso/src/internal/tester/tconfig"
-	"github.com/alcionai/corso/src/internal/version"
-	"github.com/alcionai/corso/src/pkg/backup"
-	"github.com/alcionai/corso/src/pkg/backup/details"
-	bupMD "github.com/alcionai/corso/src/pkg/backup/metadata"
-	"github.com/alcionai/corso/src/pkg/control"
-	"github.com/alcionai/corso/src/pkg/count"
-	"github.com/alcionai/corso/src/pkg/fault"
-	"github.com/alcionai/corso/src/pkg/path"
-	"github.com/alcionai/corso/src/pkg/selectors"
-	selTD "github.com/alcionai/corso/src/pkg/selectors/testdata"
-	"github.com/alcionai/corso/src/pkg/services/m365/api"
-	storeTD "github.com/alcionai/corso/src/pkg/storage/testdata"
+	"github.com/twyouens/corso/src/internal/common/ptr"
+	m365Ctrl "github.com/twyouens/corso/src/internal/m365"
+	"github.com/twyouens/corso/src/internal/m365/collection/drive"
+	"github.com/twyouens/corso/src/internal/model"
+	. "github.com/twyouens/corso/src/internal/operations/test/m365"
+	"github.com/twyouens/corso/src/internal/streamstore"
+	"github.com/twyouens/corso/src/internal/tester"
+	"github.com/twyouens/corso/src/internal/tester/its"
+	"github.com/twyouens/corso/src/internal/tester/tconfig"
+	"github.com/twyouens/corso/src/internal/version"
+	"github.com/twyouens/corso/src/pkg/backup"
+	"github.com/twyouens/corso/src/pkg/backup/details"
+	bupMD "github.com/twyouens/corso/src/pkg/backup/metadata"
+	"github.com/twyouens/corso/src/pkg/control"
+	"github.com/twyouens/corso/src/pkg/count"
+	"github.com/twyouens/corso/src/pkg/fault"
+	"github.com/twyouens/corso/src/pkg/path"
+	"github.com/twyouens/corso/src/pkg/selectors"
+	selTD "github.com/twyouens/corso/src/pkg/selectors/testdata"
+	"github.com/twyouens/corso/src/pkg/services/m365/api"
+	storeTD "github.com/twyouens/corso/src/pkg/storage/testdata"
 )
 
 type OneDriveBackupIntgSuite struct {
@@ -209,7 +207,6 @@ func (suite *OneDriveBackupIntgSuite) TestBackup_Run_oneDriveOwnerMigration() {
 	var (
 		acct    = tconfig.NewM365Account(t)
 		opts    = control.DefaultOptions()
-		mb      = evmock.NewBus()
 		counter = count.New()
 
 		categories = map[path.CategoryType][][]string{
@@ -240,7 +237,7 @@ func (suite *OneDriveBackupIntgSuite) TestBackup_Run_oneDriveOwnerMigration() {
 	oldsel := selectors.NewOneDriveBackup([]string{uname})
 	oldsel.Include(selTD.OneDriveBackupFolderScope(oldsel))
 
-	bo, bod := PrepNewTestBackupOp(t, ctx, mb, oldsel.Selector, opts, 0, counter)
+	bo, bod := PrepNewTestBackupOp(t, ctx, oldsel.Selector, opts, 0, counter)
 	defer bod.Close(t, ctx)
 
 	sel := bod.Sel
@@ -259,16 +256,15 @@ func (suite *OneDriveBackupIntgSuite) TestBackup_Run_oneDriveOwnerMigration() {
 		bo.ResourceOwner.Name())
 
 	// run the initial backup
-	RunAndCheckBackup(t, ctx, &bo, mb, false)
+	RunAndCheckBackup(t, ctx, &bo, false)
 
 	newsel := selectors.NewOneDriveBackup([]string{uid})
 	newsel.Include(selTD.OneDriveBackupFolderScope(newsel))
 	sel = newsel.SetDiscreteOwnerIDName(uid, uname)
 
 	var (
-		incMB = evmock.NewBus()
 		// the incremental backup op should have a proper user ID for the id.
-		incBO = NewTestBackupOp(t, ctx, bod, incMB, opts, counter)
+		incBO = NewTestBackupOp(t, ctx, bod, opts, counter)
 	)
 
 	require.NotEqualf(
@@ -307,7 +303,6 @@ func (suite *OneDriveBackupIntgSuite) TestBackup_Run_oneDriveOwnerMigration() {
 	assert.LessOrEqual(t, 2, incBO.Results.ItemsRead, "items read")
 	assert.NoError(t, incBO.Errors.Failure(), "non-recoverable error", clues.ToCore(incBO.Errors.Failure()))
 	assert.Empty(t, incBO.Errors.Recovered(), "recoverable/iteration errors")
-	assert.Equal(t, 1, incMB.TimesCalled[events.BackupEnd], "backup-end events")
 
 	bid := incBO.Results.BackupID
 	bup := &backup.Backup{}

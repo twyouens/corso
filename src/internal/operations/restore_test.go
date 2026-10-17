@@ -10,29 +10,27 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
-	"github.com/alcionai/corso/src/internal/common/idname"
-	strTD "github.com/alcionai/corso/src/internal/common/str/testdata"
-	"github.com/alcionai/corso/src/internal/data"
-	"github.com/alcionai/corso/src/internal/events"
-	evmock "github.com/alcionai/corso/src/internal/events/mock"
-	"github.com/alcionai/corso/src/internal/kopia"
-	"github.com/alcionai/corso/src/internal/m365"
-	"github.com/alcionai/corso/src/internal/m365/mock"
-	exchMock "github.com/alcionai/corso/src/internal/m365/service/exchange/mock"
-	"github.com/alcionai/corso/src/internal/operations/inject"
-	"github.com/alcionai/corso/src/internal/stats"
-	"github.com/alcionai/corso/src/internal/tester"
-	"github.com/alcionai/corso/src/internal/tester/tconfig"
-	"github.com/alcionai/corso/src/pkg/account"
-	"github.com/alcionai/corso/src/pkg/control"
-	"github.com/alcionai/corso/src/pkg/control/repository"
-	"github.com/alcionai/corso/src/pkg/control/testdata"
-	"github.com/alcionai/corso/src/pkg/count"
-	"github.com/alcionai/corso/src/pkg/dttm"
-	"github.com/alcionai/corso/src/pkg/selectors"
-	"github.com/alcionai/corso/src/pkg/services/m365/api/graph"
-	storeTD "github.com/alcionai/corso/src/pkg/storage/testdata"
-	"github.com/alcionai/corso/src/pkg/store"
+	"github.com/twyouens/corso/src/internal/common/idname"
+	strTD "github.com/twyouens/corso/src/internal/common/str/testdata"
+	"github.com/twyouens/corso/src/internal/data"
+	"github.com/twyouens/corso/src/internal/kopia"
+	"github.com/twyouens/corso/src/internal/m365"
+	"github.com/twyouens/corso/src/internal/m365/mock"
+	exchMock "github.com/twyouens/corso/src/internal/m365/service/exchange/mock"
+	"github.com/twyouens/corso/src/internal/operations/inject"
+	"github.com/twyouens/corso/src/internal/stats"
+	"github.com/twyouens/corso/src/internal/tester"
+	"github.com/twyouens/corso/src/internal/tester/tconfig"
+	"github.com/twyouens/corso/src/pkg/account"
+	"github.com/twyouens/corso/src/pkg/control"
+	"github.com/twyouens/corso/src/pkg/control/repository"
+	"github.com/twyouens/corso/src/pkg/control/testdata"
+	"github.com/twyouens/corso/src/pkg/count"
+	"github.com/twyouens/corso/src/pkg/dttm"
+	"github.com/twyouens/corso/src/pkg/selectors"
+	"github.com/twyouens/corso/src/pkg/services/m365/api/graph"
+	storeTD "github.com/twyouens/corso/src/pkg/storage/testdata"
+	"github.com/twyouens/corso/src/pkg/store"
 )
 
 // ---------------------------------------------------------------------------
@@ -117,7 +115,6 @@ func (suite *RestoreOpUnitSuite) TestRestoreOperation_PersistResults() {
 				"foo",
 				selectors.Selector{DiscreteOwner: "test"},
 				restoreCfg,
-				evmock.NewBus(),
 				count.New())
 			require.NoError(t, err, clues.ToCore(err))
 
@@ -321,7 +318,6 @@ func (suite *RestoreOpIntegrationSuite) TestNewRestoreOperation() {
 				"backup-id",
 				selectors.Selector{DiscreteOwner: "test"},
 				restoreCfg,
-				evmock.NewBus(),
 				count.New())
 			test.errCheck(t, err, clues.ToCore(err))
 		})
@@ -334,10 +330,7 @@ func (suite *RestoreOpIntegrationSuite) TestRestore_Run_errorNoBackup() {
 	ctx, flush := tester.NewContext(t)
 	defer flush()
 
-	var (
-		restoreCfg = testdata.DefaultRestoreConfig("")
-		mb         = evmock.NewBus()
-	)
+	restoreCfg := testdata.DefaultRestoreConfig("")
 
 	rsel := selectors.NewExchangeRestore(selectors.None())
 	rsel.Include(rsel.AllData())
@@ -363,7 +356,6 @@ func (suite *RestoreOpIntegrationSuite) TestRestore_Run_errorNoBackup() {
 		"backupID",
 		rsel.Selector,
 		restoreCfg,
-		mb,
 		count.New())
 	require.NoError(t, err, clues.ToCore(err))
 
@@ -372,6 +364,4 @@ func (suite *RestoreOpIntegrationSuite) TestRestore_Run_errorNoBackup() {
 	require.Nil(t, ds, "restoreOp.Run() should not produce details")
 	assert.Zero(t, ro.Results.ResourceOwners, "resource owners")
 	assert.Zero(t, ro.Results.BytesRead, "bytes read")
-	// no restore start, because we'd need to find the backup first.
-	assert.Equal(t, 1, mb.TimesCalled[events.RestoreEnd], "restore-end events")
 }

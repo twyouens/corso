@@ -6,13 +6,12 @@ import (
 
 	"github.com/alcionai/clues"
 
-	"github.com/alcionai/corso/src/internal/common/crash"
-	"github.com/alcionai/corso/src/internal/events"
-	"github.com/alcionai/corso/src/internal/kopia"
-	"github.com/alcionai/corso/src/internal/stats"
-	"github.com/alcionai/corso/src/pkg/control"
-	"github.com/alcionai/corso/src/pkg/control/repository"
-	"github.com/alcionai/corso/src/pkg/count"
+	"github.com/twyouens/corso/src/internal/common/crash"
+	"github.com/twyouens/corso/src/internal/kopia"
+	"github.com/twyouens/corso/src/internal/stats"
+	"github.com/twyouens/corso/src/pkg/control"
+	"github.com/twyouens/corso/src/pkg/control/repository"
+	"github.com/twyouens/corso/src/pkg/count"
 )
 
 // PersistentConfig wraps an operation that deals with repo configuration.
@@ -35,10 +34,9 @@ func NewPersistentConfigOperation(
 	opts control.Options,
 	kw *kopia.Wrapper,
 	configOpts repository.PersistentConfig,
-	bus events.Eventer,
 ) (PersistentConfigOperation, error) {
 	op := PersistentConfigOperation{
-		operation:  newOperation(opts, bus, count.New(), kw, nil),
+		operation:  newOperation(opts, count.New(), kw, nil),
 		configOpts: configOpts,
 	}
 
@@ -53,8 +51,6 @@ func (op *PersistentConfigOperation) Run(ctx context.Context) (err error) {
 			err = crErr
 		}
 	}()
-
-	// TODO(ashmrtn): Send telemetry?
 
 	return op.do(ctx)
 }

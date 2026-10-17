@@ -11,28 +11,27 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
-	"github.com/alcionai/corso/src/internal/common/ptr"
-	strTD "github.com/alcionai/corso/src/internal/common/str/testdata"
-	"github.com/alcionai/corso/src/internal/data"
-	dataMock "github.com/alcionai/corso/src/internal/data/mock"
-	evmock "github.com/alcionai/corso/src/internal/events/mock"
-	"github.com/alcionai/corso/src/internal/kopia"
-	odConsts "github.com/alcionai/corso/src/internal/m365/service/onedrive/consts"
-	"github.com/alcionai/corso/src/internal/m365/support"
-	"github.com/alcionai/corso/src/internal/model"
-	opMock "github.com/alcionai/corso/src/internal/operations/inject/mock"
-	"github.com/alcionai/corso/src/internal/tester"
-	"github.com/alcionai/corso/src/internal/tester/tconfig"
-	"github.com/alcionai/corso/src/pkg/account"
-	"github.com/alcionai/corso/src/pkg/control"
-	"github.com/alcionai/corso/src/pkg/control/repository"
-	"github.com/alcionai/corso/src/pkg/count"
-	"github.com/alcionai/corso/src/pkg/path"
-	"github.com/alcionai/corso/src/pkg/selectors"
-	selTD "github.com/alcionai/corso/src/pkg/selectors/testdata"
-	"github.com/alcionai/corso/src/pkg/services/m365/api/graph"
-	storeTD "github.com/alcionai/corso/src/pkg/storage/testdata"
-	"github.com/alcionai/corso/src/pkg/store"
+	"github.com/twyouens/corso/src/internal/common/ptr"
+	strTD "github.com/twyouens/corso/src/internal/common/str/testdata"
+	"github.com/twyouens/corso/src/internal/data"
+	dataMock "github.com/twyouens/corso/src/internal/data/mock"
+	"github.com/twyouens/corso/src/internal/kopia"
+	odConsts "github.com/twyouens/corso/src/internal/m365/service/onedrive/consts"
+	"github.com/twyouens/corso/src/internal/m365/support"
+	"github.com/twyouens/corso/src/internal/model"
+	opMock "github.com/twyouens/corso/src/internal/operations/inject/mock"
+	"github.com/twyouens/corso/src/internal/tester"
+	"github.com/twyouens/corso/src/internal/tester/tconfig"
+	"github.com/twyouens/corso/src/pkg/account"
+	"github.com/twyouens/corso/src/pkg/control"
+	"github.com/twyouens/corso/src/pkg/control/repository"
+	"github.com/twyouens/corso/src/pkg/count"
+	"github.com/twyouens/corso/src/pkg/path"
+	"github.com/twyouens/corso/src/pkg/selectors"
+	selTD "github.com/twyouens/corso/src/pkg/selectors/testdata"
+	"github.com/twyouens/corso/src/pkg/services/m365/api/graph"
+	storeTD "github.com/twyouens/corso/src/pkg/storage/testdata"
+	"github.com/twyouens/corso/src/pkg/store"
 )
 
 func getKopiaHandles(
@@ -88,8 +87,7 @@ func (suite *MaintenanceOpIntegrationSuite) TestRepoMaintenance() {
 		store.NewWrapper(ms),
 		repository.Maintenance{
 			Type: repository.MetadataMaintenance,
-		},
-		evmock.NewBus())
+		})
 	require.NoError(t, err, clues.ToCore(err))
 
 	err = mo.Run(ctx)
@@ -185,7 +183,6 @@ func (suite *MaintenanceOpNightlySuite) TestRepoMaintenance_GarbageCollection() 
 				acct,
 				osel.Selector,
 				selectors.Selector{DiscreteOwner: userID},
-				evmock.NewBus(),
 				count.New())
 			require.NoError(t, err, clues.ToCore(err))
 
@@ -232,8 +229,7 @@ func (suite *MaintenanceOpNightlySuite) TestRepoMaintenance_GarbageCollection() 
 				Type: repository.CompleteMaintenance,
 				// Set buffer to 0 so things will actually be garbage collected.
 				CleanupBuffer: ptr.To(time.Duration(0)),
-			},
-			evmock.NewBus())
+			})
 		require.NoError(t, err, clues.ToCore(err))
 
 		err = mo.Run(ctx)
