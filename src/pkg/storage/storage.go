@@ -43,16 +43,6 @@ var (
 type Storage struct {
 	Provider ProviderType
 	Config   map[string]string
-	// TODO: These are AWS S3 specific -> move these out
-	SessionTags     map[string]string
-	Role            string
-	SessionName     string
-	SessionDuration string
-	// QueryParams allows passing custom query parameters to S3 GET object
-	// requests. Parameters prefixed by `x-` will be ignored by S3 (no functional
-	// changes) but added to server access logs. These KV-pairs are session
-	// specific and won't be persisted to or sourced from the corso config file.
-	QueryParams map[string]string
 }
 
 // NewStorage aggregates all the supplied configurations into a single configuration.
@@ -62,30 +52,6 @@ func NewStorage(p ProviderType, cfgs ...common.StringConfigurer) (Storage, error
 	return Storage{
 		Provider: p,
 		Config:   cs,
-	}, err
-}
-
-// NewStorageUsingRole supports specifying an AWS IAM role the storage provider
-// should assume.
-func NewStorageUsingRole(
-	p ProviderType,
-	roleARN string,
-	sessionName string,
-	sessionTags map[string]string,
-	queryParams map[string]string,
-	duration string,
-	cfgs ...common.StringConfigurer,
-) (Storage, error) {
-	cs, err := common.UnionStringConfigs(cfgs...)
-
-	return Storage{
-		Provider:        p,
-		Config:          cs,
-		Role:            roleARN,
-		SessionTags:     sessionTags,
-		QueryParams:     queryParams,
-		SessionName:     sessionName,
-		SessionDuration: duration,
 	}, err
 }
 
