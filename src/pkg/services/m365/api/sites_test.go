@@ -97,6 +97,73 @@ func (suite *SitesUnitSuite) TestValidateSite() {
 	}
 }
 
+func (suite *SitesUnitSuite) TestIsSiteID() {
+	var (
+		siteCollectionID = "deadbeef-0000-0000-0000-000000000000"
+		webID            = "beefdead-0000-0000-0000-000000000000"
+		hostname         = "10rqc2.sharepoint.com"
+	)
+
+	tests := []struct {
+		name       string
+		identifier string
+		expect     bool
+	}{
+		{
+			name:       "bare site-collection GUID",
+			identifier: siteCollectionID,
+			expect:     true,
+		},
+		{
+			name:       "composite id, no hostname",
+			identifier: siteCollectionID + "," + webID,
+			expect:     true,
+		},
+		{
+			name:       "composite id, with hostname",
+			identifier: hostname + "," + siteCollectionID + "," + webID,
+			expect:     true,
+		},
+		{
+			name:       "webURL",
+			identifier: "https://" + hostname + "/sites/Example",
+			expect:     false,
+		},
+		{
+			name:       "webURL path only",
+			identifier: "/sites/Example",
+			expect:     false,
+		},
+		{
+			name:       "empty string",
+			identifier: "",
+			expect:     false,
+		},
+		{
+			name:       "hostname with a single trailing comma and no UUID",
+			identifier: hostname + ",",
+			expect:     false,
+		},
+		{
+			name:       "too many comma-separated segments",
+			identifier: hostname + "," + siteCollectionID + "," + webID + "," + webID,
+			expect:     false,
+		},
+		{
+			name:       "two-part id where one segment isn't a UUID",
+			identifier: hostname + "," + siteCollectionID,
+			expect:     false,
+		},
+	}
+	for _, test := range tests {
+		suite.Run(test.name, func() {
+			t := suite.T()
+
+			assert.Equal(t, test.expect, isSiteID(test.identifier))
+		})
+	}
+}
+
 type SitesIntgSuite struct {
 	tester.Suite
 	its intgTesterSetup
@@ -170,10 +237,18 @@ func (suite *SitesIntgSuite) TestSites_GetByID() {
 			},
 		},
 		{
-			name: "malformed id",
+			// A bare site-collection GUID with no comma at all. Before the
+			// fix to isSiteID (see CHANGELOG.md), this fell through to the
+			// webURL-parsing branch and Graph rejected the resulting
+			// nonsense hostname with some error, which this test could not
+			// distinguish from a genuine "no such site" response. Asserting
+			// ErrNotFound specifically proves the identifier is now
+			// dispatched through Sites().BySiteId(...) rather than the
+			// webURL branch.
+			name: "bare id, no such site",
 			id:   uuid.NewString(),
 			expectErr: func(t *testing.T, err error) bool {
-				assert.Error(t, err, clues.ToCore(err))
+				assert.ErrorIs(t, err, core.ErrNotFound, clues.ToCore(err))
 				return true
 			},
 		},
