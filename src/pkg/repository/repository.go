@@ -96,12 +96,6 @@ func New(
 	opts control.Options,
 	configFileRepoID string,
 ) (singleRepo *repository, err error) {
-	ctx = clues.Add(
-		ctx,
-		"acct_provider", acct.Provider.String(),
-		"acct_id", clues.Hide(acct.ID()),
-		"storage_provider", st.Provider.String())
-
 	repoID := configFileRepoID
 	if len(configFileRepoID) == 0 {
 		repoID = newRepoID(st)
@@ -146,11 +140,7 @@ func (r *repository) Initialize(ctx context.Context, cfg InitConfig) (err error)
 
 	observe.Message(ctx, observe.ProgressCfg{}, "Initializing repository")
 
-	if err := r.setupKopia(ctx, cfg.RetentionOpts, true); err != nil {
-		return err
-	}
-
-	return nil
+	return r.setupKopia(ctx, cfg.RetentionOpts, true)
 }
 
 type ConnConfig struct {

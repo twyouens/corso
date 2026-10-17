@@ -252,7 +252,7 @@ func (b Backup) Values(skipID bool) []string {
 	)
 
 	if errCount+b.TotalSkippedItems > 0 {
-		status += (" (")
+		status += " ("
 	}
 
 	if errCount > 0 {
@@ -284,7 +284,7 @@ func (b Backup) Values(skipID bool) []string {
 	status += strings.Join(skipped, ", ")
 
 	if errCount+b.TotalSkippedItems > 0 {
-		status += (")")
+		status += ")"
 	}
 
 	name := str.First(

@@ -168,7 +168,7 @@ func (suite *ExportUnitSuite) TestExportRestoreCollections_libraries() {
 			{
 				ID:   "id1.data",
 				Name: "name1",
-				Body: io.NopCloser((bytes.NewBufferString("body1"))),
+				Body: io.NopCloser(bytes.NewBufferString("body1")),
 			},
 		}
 	)

@@ -1,12 +1,12 @@
-# This must match the version defined in .github/workflows/lint.yaml.
-WANTED_LINT_VERSION := 1.54.2
+# This must match the version defined in .github/workflows/ci.yml.
+WANTED_LINT_VERSION := 2.15.0
 LINT_VERSION := $(shell golangci-lint version | cut -d' ' -f4)
 HAS_LINT := $(shell which golangci-lint)
 
 INSTALL_LINT_PAGE := "https://golangci-lint.run/usage/install/"
 BAD_LINT_MSG := "Missing golangci-lint version $(WANTED_LINT_VERSION). Visit $(INSTALL_LINT_PAGE) for instructions on how to install"
 
-.PHONY: check-lint check-lint-version lint load-test
+.PHONY: check-lint check-lint-version lint load-test check
 
 build:
 	go build -o corso
@@ -14,6 +14,13 @@ build:
 lint: check-lint-version
 	golangci-lint run
 	staticcheck ./...
+
+# check runs everything CI runs: build, lint and unit tests. Works with
+# GOWORK=off so it matches exactly what a pull request's CI job verifies.
+check:
+	GOWORK=off go build ./...
+	GOWORK=off $(MAKE) lint
+	GOWORK=off go test ./...
 
 fmt:
 	gofumpt -w .

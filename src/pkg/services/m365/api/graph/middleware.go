@@ -301,7 +301,7 @@ func (mw RetryMiddleware) isRetriableRespCode(ctx context.Context, resp *http.Re
 }
 
 func (mw RetryMiddleware) isRetriableRequest(req *http.Request) bool {
-	isBodiedMethod := req.Method == "POST" || req.Method == "PUT" || req.Method == "PATCH"
+	isBodiedMethod := req.Method == http.MethodPost || req.Method == http.MethodPut || req.Method == http.MethodPatch
 	if isBodiedMethod && req.Body != nil {
 		return req.ContentLength != -1
 	}

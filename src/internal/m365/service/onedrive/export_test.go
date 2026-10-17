@@ -77,7 +77,7 @@ func (suite *ExportUnitSuite) TestGetItems() {
 				{
 					ID:   "name1",
 					Name: "name1",
-					Body: io.NopCloser((bytes.NewBufferString("body1"))),
+					Body: io.NopCloser(bytes.NewBufferString("body1")),
 				},
 			},
 		},
@@ -102,12 +102,12 @@ func (suite *ExportUnitSuite) TestGetItems() {
 				{
 					ID:   "name1",
 					Name: "name1",
-					Body: io.NopCloser((bytes.NewBufferString("body1"))),
+					Body: io.NopCloser(bytes.NewBufferString("body1")),
 				},
 				{
 					ID:   "name2",
 					Name: "name2",
-					Body: io.NopCloser((bytes.NewBufferString("body2"))),
+					Body: io.NopCloser(bytes.NewBufferString("body2")),
 				},
 			},
 		},
@@ -128,7 +128,7 @@ func (suite *ExportUnitSuite) TestGetItems() {
 				{
 					ID:   "name1.data",
 					Name: "name1",
-					Body: io.NopCloser((bytes.NewBufferString("body1"))),
+					Body: io.NopCloser(bytes.NewBufferString("body1")),
 				},
 			},
 		},
@@ -150,7 +150,7 @@ func (suite *ExportUnitSuite) TestGetItems() {
 				{
 					ID:   "id1.data",
 					Name: "name1",
-					Body: io.NopCloser((bytes.NewBufferString("body1"))),
+					Body: io.NopCloser(bytes.NewBufferString("body1")),
 				},
 			},
 		},
@@ -318,7 +318,7 @@ func (suite *ExportUnitSuite) TestExportRestoreCollections() {
 			{
 				ID:   "id1.data",
 				Name: "name1",
-				Body: io.NopCloser((bytes.NewBufferString("body1"))),
+				Body: io.NopCloser(bytes.NewBufferString("body1")),
 			},
 		}
 	)

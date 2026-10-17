@@ -137,7 +137,6 @@ func handleListReplace(
 		ctx,
 		ptr.Val(restoredList.GetId()),
 		patchList)
-
 	if err != nil {
 		return nil, clues.WrapWC(ctx, err, "patching list")
 	}

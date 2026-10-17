@@ -178,14 +178,13 @@ func (suite *ExchangeBackupIntgSuite) TestBackup_Run_exchange() {
 			// Basic, happy path incremental test.  No changes are dictated or expected.
 			// This only tests that an incremental backup is runnable at all, and that it
 			// produces fewer results than the last backup.
-			var (
-				incBO = NewTestBackupOp(
-					t,
-					ctx,
-					bod,
-					opts,
-					counter)
-			)
+
+			incBO := NewTestBackupOp(
+				t,
+				ctx,
+				bod,
+				opts,
+				counter)
 
 			RunAndCheckBackup(t, ctx, &incBO, true)
 			CheckBackupIsInManifests(

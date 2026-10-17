@@ -262,10 +262,8 @@ func (suite *OneDriveBackupIntgSuite) TestBackup_Run_oneDriveOwnerMigration() {
 	newsel.Include(selTD.OneDriveBackupFolderScope(newsel))
 	sel = newsel.SetDiscreteOwnerIDName(uid, uname)
 
-	var (
-		// the incremental backup op should have a proper user ID for the id.
-		incBO = NewTestBackupOp(t, ctx, bod, opts, counter)
-	)
+	// the incremental backup op should have a proper user ID for the id.
+	incBO := NewTestBackupOp(t, ctx, bod, opts, counter)
 
 	require.NotEqualf(
 		t,

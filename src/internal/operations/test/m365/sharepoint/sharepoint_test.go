@@ -408,9 +408,7 @@ func (suite *SharePointRestoreNightlyIntgSuite) TestRestore_Run_sharepointDelete
 			Patch(ctx, patchBody, nil)
 		require.NoError(t, err, clues.ToCore(err))
 
-		var (
-			ctr = count.New()
-		)
+		ctr := count.New()
 
 		ro, _ := PrepNewTestRestoreOp(
 			t,
@@ -457,9 +455,7 @@ func (suite *SharePointRestoreNightlyIntgSuite) TestRestore_Run_sharepointDelete
 			Delete(ctx, nil)
 		require.NoError(t, err, clues.ToCore(err))
 
-		var (
-			ctr = count.New()
-		)
+		ctr := count.New()
 
 		ro, _ := PrepNewTestRestoreOp(
 			t,
@@ -523,9 +519,7 @@ func (suite *SharePointRestoreNightlyIntgSuite) TestRestore_Run_sharepointDelete
 		ctx, flush := tester.NewContext(t)
 		defer flush()
 
-		var (
-			ctr = count.New()
-		)
+		ctr := count.New()
 
 		ro, _ := PrepNewTestRestoreOp(
 			t,
