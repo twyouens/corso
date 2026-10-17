@@ -31,12 +31,10 @@ const Prefix = "k3ep-seed"
 // package outside of _test.go files.
 const (
 	// EnvTenantID, EnvClientID and EnvClientSecret are the application's
-	// credentials for the test tenant. These are the names actually present
-	// in .secrets/test-tenant.env today; they differ from the AZURE_* names
-	// a draft note elsewhere describes (see this chunk's result for detail).
-	EnvTenantID     = "M365_TENANT_ID"
-	EnvClientID     = "M365_CLIENT_ID"
-	EnvClientSecret = "M365_CLIENT_SECRET"
+	// credentials for the test tenant. These match the fork's CLAUDE.md.
+	EnvTenantID     = "AZURE_TENANT_ID"
+	EnvClientID     = "AZURE_CLIENT_ID"
+	EnvClientSecret = "AZURE_CLIENT_SECRET"
 
 	// EnvSeedUserID names an existing, already-licensed Microsoft 365 user
 	// (UPN or object ID) whose mailbox and OneDrive the seeder writes

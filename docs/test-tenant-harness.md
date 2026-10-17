@@ -28,9 +28,9 @@ that later chunks assert against.
 
 | Variable | What it is |
 | --- | --- |
-| `M365_TENANT_ID` | The test tenant's Entra tenant ID. |
-| `M365_CLIENT_ID` | The app registration's client ID. |
-| `M365_CLIENT_SECRET` | The app registration's client secret. |
+| `AZURE_TENANT_ID` | The test tenant's Entra tenant ID. |
+| `AZURE_CLIENT_ID` | The app registration's client ID. |
+| `AZURE_CLIENT_SECRET` | The app registration's client secret. |
 | `SEED_USER_ID` | An **existing, already-licensed** M365 user (UPN or object ID) whose mailbox and OneDrive the harness seeds dedicated folders into. The harness never creates this user. |
 | `SEED_SITE_ID` | An **existing** SharePoint site (canonical Graph site ID) the harness adds a dedicated document library and list to. The harness never creates this site. |
 
@@ -40,13 +40,14 @@ Optional:
 | --- | --- |
 | `SEED_MANIFEST_PATH` | Where the seeder writes the seed manifest. Defaults to `seed-manifest.json` in the process's working directory. |
 
-These three credential names (`M365_TENANT_ID`, `M365_CLIENT_ID`,
-`M365_CLIENT_SECRET`) are what is actually in `.secrets/test-tenant.env`
-today. A separate, locally-kept draft of this fork's `CLAUDE.md` (not yet
-committed to this repository) describes the same credentials as
-`AZURE_TENANT_ID`/`AZURE_CLIENT_ID`/`AZURE_CLIENT_SECRET`; that note should
-be corrected to match, or the env file renamed to match it - whichever a
-human decides, this harness uses the names that are actually in the file.
+These three credential names (`AZURE_TENANT_ID`, `AZURE_CLIENT_ID`,
+`AZURE_CLIENT_SECRET`) match this fork's `CLAUDE.md`. Earlier in this
+chunk's development, `.secrets/test-tenant.env` briefly defined the same
+three credentials as `M365_TENANT_ID`/`M365_CLIENT_ID`/`M365_CLIENT_SECRET`
+instead; the user decided the guide's names win, and the env file has
+been (or will be) renamed to match. If `go run ./src/cmd/seed` ever reports
+these three as missing, check the env file still uses the `M365_*` names
+and rename them.
 
 On start-up, both `src/cmd/seed` and the integration test check that every
 variable above (except the optional one) is set, and if not, report the
@@ -54,7 +55,7 @@ exact missing names - never a value - and exit non-zero:
 
 ```
 $ go run ./src/cmd/seed
-missing required environment variable(s): [M365_TENANT_ID M365_CLIENT_ID M365_CLIENT_SECRET SEED_USER_ID SEED_SITE_ID]
+missing required environment variable(s): [AZURE_TENANT_ID AZURE_CLIENT_ID AZURE_CLIENT_SECRET SEED_USER_ID SEED_SITE_ID]
 ```
 
 ## Seeding the tenant
@@ -163,8 +164,8 @@ chunks 0.5-0.7, exercise a different, pre-existing Alcion test tenant via
 
 `.github/workflows/nightly-test-tenant.yml` runs `test-integration` on a
 schedule (04:00 UTC daily) and on demand (`workflow_dispatch`). Repository
-secrets required: **`M365_TENANT_ID`, `M365_CLIENT_ID`,
-`M365_CLIENT_SECRET`**. Repository variables (not secrets, since they are
+secrets required: **`AZURE_TENANT_ID`, `AZURE_CLIENT_ID`,
+`AZURE_CLIENT_SECRET`**. Repository variables (not secrets, since they are
 not sensitive) required: **`SEED_USER_ID`, `SEED_SITE_ID`**. If any secret
 is missing, the step fails with the same name-only message shown above,
 not a stack trace. Results are reported as the job's pass/fail status, an

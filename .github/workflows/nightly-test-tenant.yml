@@ -38,9 +38,9 @@ jobs:
           # repository. If any of these three is missing, src/internal/seed
           # reports its exact name (never a value) and the step below fails
           # with that message rather than a stack trace.
-          M365_TENANT_ID: ${{ secrets.M365_TENANT_ID }}
-          M365_CLIENT_ID: ${{ secrets.M365_CLIENT_ID }}
-          M365_CLIENT_SECRET: ${{ secrets.M365_CLIENT_SECRET }}
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
           # Not credentials - the existing, already-licensed test user and
           # existing SharePoint site the harness seeds dedicated, prefixed
           # folders into. Repository variables (not secrets) because they
