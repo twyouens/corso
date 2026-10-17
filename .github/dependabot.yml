@@ -7,8 +7,6 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
-    reviewers:
-      - "alcionai/corso-maintainers"
     open-pull-requests-limit: 50
     rebase-strategy: "disabled"
 
@@ -17,10 +15,6 @@ updates:
     directory: "website/"
     schedule:
       interval: "daily"
-    reviewers:
-      - "alcionai/corso-maintainers"
-      - "ntolia"
-      - "gmatev"
     open-pull-requests-limit: 50
     rebase-strategy: "disabled"
 
@@ -29,7 +23,5 @@ updates:
     directory: "src/"
     schedule:
       interval: "daily"
-    reviewers:
-      - "alcionai/corso-maintainers"
     open-pull-requests-limit: 50
     rebase-strategy: "disabled"
