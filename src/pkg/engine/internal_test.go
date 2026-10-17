@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/twyouens/corso/src/internal/model"
+	"github.com/twyouens/corso/src/internal/tester"
 	"github.com/twyouens/corso/src/pkg/backup"
 	"github.com/twyouens/corso/src/pkg/count"
 )
@@ -191,14 +192,17 @@ func TestStartProgress_PollsAndFinalizes(t *testing.T) {
 // when called with no tags - the guard against "delete everything" fires
 // before anything else happens.
 func TestDeleteBackupPoints_RejectsEmptyTags(t *testing.T) {
+	ctx, flush := tester.NewContext(t)
+	defer flush()
+
 	r := &Repository{}
 
-	n, err := r.DeleteBackupPoints(nil, nil) //nolint:staticcheck // nil ctx is fine, never used on this path
+	n, err := r.DeleteBackupPoints(ctx, nil)
 	require.Error(t, err)
 	assert.ErrorIs(t, err, ErrEmptyTagFilter)
 	assert.Equal(t, 0, n)
 
-	n, err = r.DeleteBackupPoints(nil, map[string]string{}) //nolint:staticcheck
+	n, err = r.DeleteBackupPoints(ctx, map[string]string{})
 	require.Error(t, err)
 	assert.ErrorIs(t, err, ErrEmptyTagFilter)
 	assert.Equal(t, 0, n)
