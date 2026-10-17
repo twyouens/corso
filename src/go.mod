@@ -1,6 +1,6 @@
 module github.com/twyouens/corso/src
 
-go 1.21
+go 1.27.2
 
 replace (
 	github.com/kopia/kopia => github.com/alcionai/kopia v0.12.2-0.20240322180947-41471159a0a4

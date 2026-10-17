@@ -9,18 +9,18 @@ import (
 	"github.com/spf13/cobra"
 	"golang.org/x/exp/slices"
 
-	"github.com/alcionai/corso/src/cli/backup"
-	"github.com/alcionai/corso/src/cli/debug"
-	"github.com/alcionai/corso/src/cli/export"
-	"github.com/alcionai/corso/src/cli/flags"
-	"github.com/alcionai/corso/src/cli/help"
-	"github.com/alcionai/corso/src/cli/print"
-	"github.com/alcionai/corso/src/cli/repo"
-	"github.com/alcionai/corso/src/cli/restore"
-	"github.com/alcionai/corso/src/internal/observe"
-	"github.com/alcionai/corso/src/internal/version"
-	"github.com/alcionai/corso/src/pkg/config"
-	"github.com/alcionai/corso/src/pkg/logger"
+	"github.com/twyouens/corso/src/cli/backup"
+	"github.com/twyouens/corso/src/cli/debug"
+	"github.com/twyouens/corso/src/cli/export"
+	"github.com/twyouens/corso/src/cli/flags"
+	"github.com/twyouens/corso/src/cli/help"
+	"github.com/twyouens/corso/src/cli/print"
+	"github.com/twyouens/corso/src/cli/repo"
+	"github.com/twyouens/corso/src/cli/restore"
+	"github.com/twyouens/corso/src/internal/observe"
+	"github.com/twyouens/corso/src/internal/version"
+	"github.com/twyouens/corso/src/pkg/config"
+	"github.com/twyouens/corso/src/pkg/logger"
 )
 
 // ------------------------------------------------------------------------------------------
@@ -88,7 +88,7 @@ func handleMailBoxFlag(ctx context.Context, c *cobra.Command, flagNames []string
 func handleCorsoCmd(cmd *cobra.Command, args []string) error {
 	v, _ := cmd.Flags().GetBool("version")
 	if v {
-		print.Outf(cmd.Context(), "Corso version: "+version.CurrentVersion())
+		print.Outf(cmd.Context(), "Corso version: %s", version.CurrentVersion())
 		return nil
 	}
 
@@ -117,7 +117,6 @@ func BuildCommandTree(cmd *cobra.Command) {
 	logger.AddLoggingFlags(cmd)
 	observe.AddProgressBarFlags(cmd)
 	print.AddOutputFlag(cmd)
-	flags.AddGlobalOperationFlags(cmd)
 	cmd.SetUsageTemplate(indentExamplesTemplate(corsoCmd.UsageTemplate()))
 
 	cmd.CompletionOptions.DisableDefaultCmd = true
