@@ -154,7 +154,7 @@ type UpdateItemPermissioner interface {
 		ctx context.Context,
 		driveID, itemID string,
 		body *drives.ItemItemsItemInvitePostRequestBody,
-	) (drives.ItemItemsItemInviteResponseable, error)
+	) (drives.ItemItemsItemInvitePostResponseable, error)
 }
 
 type UpdateItemLinkSharer interface {

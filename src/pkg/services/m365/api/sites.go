@@ -108,12 +108,44 @@ const uuidRETmpl = "[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-
 
 var uuidRE = regexp.MustCompile(uuidRETmpl)
 
-// matches a site ID, with or without a doman name.  Ex, either one of:
-// 10rqc2.sharepoint.com,deadbeef-0000-0000-0000-000000000000,beefdead-0000-0000-0000-000000000000
-// deadbeef-0000-0000-0000-000000000000,beefdead-0000-0000-0000-000000000000
-var siteIDRE = regexp.MustCompile(`(.+,)?` + uuidRETmpl + "," + uuidRETmpl)
+// uuidFullRE matches a string that is exactly one UUID, start to end. Unlike
+// uuidRE above (used elsewhere to find a UUID anywhere in a string), this is
+// anchored because isSiteID needs to know whether an entire comma-separated
+// segment is a UUID, not merely whether it contains one.
+var uuidFullRE = regexp.MustCompile("^" + uuidRETmpl + "$")
 
 const sitesWebURLGetTemplate = "https://graph.microsoft.com/v1.0/sites/%s:/%s%s"
+
+// isSiteID reports whether identifier is a Microsoft Graph site ID, as
+// opposed to a webURL. A site ID is comma-separated and takes one of three
+// forms, all of which Sites().BySiteId(...) accepts directly:
+//   - a bare site-collection GUID, with no comma at all:
+//     deadbeef-0000-0000-0000-000000000000
+//   - a "siteCollectionId,webId" pair, with no hostname:
+//     deadbeef-0000-0000-0000-000000000000,beefdead-0000-0000-0000-000000000000
+//   - the full "hostname,siteCollectionId,webId" composite form:
+//     10rqc2.sharepoint.com,deadbeef-0000-0000-0000-000000000000,beefdead-0000-0000-0000-000000000000
+//
+// A previous version of this check (siteIDRE) required at least two
+// comma-separated UUIDs, so a bare site-collection GUID - which has no comma
+// at all - fell through to the webURL-parsing branch below, which then sent
+// Graph a nonsense hostname. See CHANGELOG.md.
+func isSiteID(identifier string) bool {
+	parts := strings.Split(identifier, ",")
+
+	switch len(parts) {
+	case 1:
+		return uuidFullRE.MatchString(parts[0])
+	case 2:
+		return uuidFullRE.MatchString(parts[0]) && uuidFullRE.MatchString(parts[1])
+	case 3:
+		return !uuidFullRE.MatchString(parts[0]) &&
+			uuidFullRE.MatchString(parts[1]) &&
+			uuidFullRE.MatchString(parts[2])
+	default:
+		return false
+	}
+}
 
 // GetByID looks up the site matching the given identifier.  The identifier can be either a
 // canonical site id or a webURL.  Assumes the webURL is complete and well formed;
@@ -130,7 +162,7 @@ func (c Sites) GetByID(
 
 	ctx = clues.Add(ctx, "given_site_id", identifier)
 
-	if siteIDRE.MatchString(identifier) {
+	if isSiteID(identifier) {
 		options := &sites.SiteItemRequestBuilderGetRequestConfiguration{
 			QueryParameters: &sites.SiteItemRequestBuilderGetQueryParameters{},
 		}

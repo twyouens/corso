@@ -133,23 +133,20 @@ func Run(ctx context.Context, c api.Client, cfg Config, report func(string)) (Ma
 // URL if the display name is empty), for the "resolved target identity"
 // line Run reports before any write.
 //
-// This does not call api.Sites.GetIDAndName/GetByID, even though that
-// looks like the obviously right wrapper to use. A live run proved it
-// fails for a site ID shaped like the one this harness was actually
-// given: GetByID dispatches on a regex (siteIDRE in
-// pkg/services/m365/api/sites.go) that requires at least two comma-
-// separated UUIDs (the "hostname,siteCollectionId,webId" composite form).
-// A bare site-collection GUID with no commas - exactly what SEED_SITE_ID
-// is here, and exactly what every other call in this package already
-// passes to Sites().BySiteId(...) successfully - fails that regex, so
-// GetByID falls through to its "treat it as a URL" branch and sends a
-// nonsense hostname, which Graph rejects with "Invalid hostname for this
-// tenancy". That is a real bug in existing, shared code outside this
-// package; fixing the regex there is a broader change with other callers
-// to consider, so this works around it locally by reaching the same
-// Sites().BySiteId(...) escape hatch sharepoint.go already uses
-// successfully with this exact ID, rather than widening sites.go's
-// dispatch logic as part of this chunk.
+// This does not call api.Sites.GetIDAndName/GetByID, even though that looks
+// like the obviously right wrapper to use. A live run proved it failed for
+// a site ID shaped like the one this harness was actually given: GetByID's
+// dispatch regex required at least two comma-separated UUIDs (the
+// "hostname,siteCollectionId,webId" composite form), so a bare
+// site-collection GUID with no commas at all - exactly what SEED_SITE_ID is
+// here - fell through to its "treat it as a URL" branch and sent Graph a
+// nonsense hostname. That bug (CHANGELOG.md) is fixed in sites.go as of
+// chunk 0.5 (isSiteID now accepts a bare GUID), so GetByID and GetIDAndName
+// are safe to use again for this ID shape. This still reaches the same
+// Sites().BySiteId(...) call directly, both to avoid re-threading this
+// call's result through GetByID's slightly different return shape and
+// because every other call in this package already does the same thing.
+
 func resolveSiteName(ctx context.Context, c api.Client, siteID string) (string, error) {
 	site, err := c.Sites().Stable.
 		Client().

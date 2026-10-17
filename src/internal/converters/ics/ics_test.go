@@ -1242,9 +1242,7 @@ func (s *ICSUnitSuite) TestCancellations() {
 			e := baseEvent()
 
 			e.SetIsCancelled(ptr.To(true))
-			e.SetAdditionalData(map[string]any{
-				"cancelledOccurrences": tt.cancelledIds,
-			})
+			e.SetCancelledOccurrences(tt.cancelledIds)
 			bts, err := eventToJSON(e)
 			require.NoError(t, err, "getting serialized content")
 
@@ -1262,22 +1260,6 @@ func getDateTimeZone(t time.Time, tz string) *models.DateTimeTimeZone {
 	dt.SetTimeZone(ptr.To(tz))
 
 	return dt
-}
-
-func eventToMap(e *models.Event) (map[string]any, error) {
-	bts, err := eventToJSON(e)
-	if err != nil {
-		return nil, err
-	}
-
-	parsed := map[string]any{}
-
-	err = json.Unmarshal(bts, &parsed)
-	if err != nil {
-		return nil, err
-	}
-
-	return parsed, nil
 }
 
 func eventToJSON(e *models.Event) ([]byte, error) {
@@ -1318,13 +1300,8 @@ func (s *ICSUnitSuite) TestEventExceptions() {
 				exception.SetStart(newStart)
 				exception.SetEnd(newEnd)
 
-				parsed, err := eventToMap(exception)
-				require.NoError(s.T(), err, "parsing exception")
-
-				// add exception event to additional data
-				e.SetAdditionalData(map[string]any{
-					"exceptionOccurrences": []map[string]any{parsed},
-				})
+				// add exception event as a typed exceptionOccurrences entry
+				e.SetExceptionOccurrences([]models.Eventable{exception})
 
 				return e
 			},
@@ -1374,16 +1351,8 @@ func (s *ICSUnitSuite) TestEventExceptions() {
 				exception2.SetStart(newStart)
 				exception2.SetEnd(newEnd)
 
-				parsed1, err := eventToMap(exception1)
-				require.NoError(s.T(), err, "parsing exception 1")
-
-				parsed2, err := eventToMap(exception2)
-				require.NoError(s.T(), err, "parsing exception 2")
-
-				// add exception event to additional data
-				e.SetAdditionalData(map[string]any{
-					"exceptionOccurrences": []map[string]any{parsed1, parsed2},
-				})
+				// add exception events as typed exceptionOccurrences entries
+				e.SetExceptionOccurrences([]models.Eventable{exception1, exception2})
 
 				return e
 			},

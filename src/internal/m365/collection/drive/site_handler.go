@@ -257,7 +257,7 @@ func (h siteRestoreHandler) PostItemPermissionUpdate(
 	ctx context.Context,
 	driveID, itemID string,
 	body *drives.ItemItemsItemInvitePostRequestBody,
-) (drives.ItemItemsItemInviteResponseable, error) {
+) (drives.ItemItemsItemInvitePostResponseable, error) {
 	return h.ac.Drives().PostItemPermissionUpdate(ctx, driveID, itemID, body)
 }
 

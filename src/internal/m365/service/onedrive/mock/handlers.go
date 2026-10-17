@@ -634,8 +634,8 @@ func (h *RestoreHandler) PostItemPermissionUpdate(
 	context.Context,
 	string, string,
 	*drives.ItemItemsItemInvitePostRequestBody,
-) (drives.ItemItemsItemInviteResponseable, error) {
-	return drives.NewItemItemsItemInviteResponse(), nil
+) (drives.ItemItemsItemInvitePostResponseable, error) {
+	return drives.NewItemItemsItemInvitePostResponse(), nil
 }
 
 func (h *RestoreHandler) PostItemLinkShareUpdate(

@@ -194,7 +194,7 @@ func (m mockUdip) PostItemPermissionUpdate(
 	ctx context.Context,
 	driveID, itemID string,
 	body *drives.ItemItemsItemInvitePostRequestBody,
-) (drives.ItemItemsItemInviteResponseable, error) {
+) (drives.ItemItemsItemInvitePostResponseable, error) {
 	if ptr.Val(body.GetRecipients()[0].GetObjectId()) == "failure" {
 		m.success <- false
 
@@ -205,7 +205,7 @@ func (m mockUdip) PostItemPermissionUpdate(
 
 	m.success <- true
 
-	resp := drives.NewItemItemsItemInviteResponse()
+	resp := drives.NewItemItemsItemInvitePostResponse()
 	perm := models.NewPermission()
 	perm.SetId(ptr.To(itemID))
 	resp.SetValue([]models.Permissionable{perm})

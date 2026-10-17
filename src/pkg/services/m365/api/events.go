@@ -3,7 +3,6 @@ package api
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"strconv"
@@ -18,7 +17,6 @@ import (
 
 	"github.com/twyouens/corso/src/internal/common/ptr"
 	"github.com/twyouens/corso/src/internal/common/sanitize"
-	"github.com/twyouens/corso/src/internal/common/str"
 	"github.com/twyouens/corso/src/pkg/backup/details"
 	"github.com/twyouens/corso/src/pkg/dttm"
 	"github.com/twyouens/corso/src/pkg/fault"
@@ -231,42 +229,32 @@ func (c Events) GetItem(
 	return event, EventInfo(event), nil
 }
 
-// fixupExceptionOccurrences gets attachments and converts the data
-// into a format that gets serialized when storing to kopia
+// fixupExceptionOccurrences gets attachments for each exception occurrence
+// and attaches them to the typed exception event so they get serialized
+// when storing to kopia.
+//
+// exceptionOccurrences used to arrive only in AdditionalData, because the
+// fork fetched them from a beta-only Graph endpoint using a stable-SDK event
+// type with no typed field for them. The current Graph SDK has promoted
+// exceptionOccurrences to a typed []Eventable field, so each exception is
+// already a fully-typed Eventable and needs no map/JSON round trip to parse.
 func fixupExceptionOccurrences(
 	ctx context.Context,
 	client Events,
 	event models.Eventable,
 	userID string,
 ) error {
-	// Fetch attachments for exceptions
-	exceptionOccurrences := event.GetAdditionalData()["exceptionOccurrences"]
-	if exceptionOccurrences == nil {
-		return nil
-	}
+	exceptionOccurrences := event.GetExceptionOccurrences()
 
-	eo, ok := exceptionOccurrences.([]any)
-	if !ok {
-		return clues.New("converting exceptionOccurrences to []any").
-			With("type", fmt.Sprintf("%T", exceptionOccurrences))
-	}
-
-	for _, instance := range eo {
-		instance, ok := instance.(map[string]any)
-		if !ok {
-			return clues.New("converting instance to map[string]any").
-				With("type", fmt.Sprintf("%T", instance))
-		}
-
-		evt, err := EventFromMap(instance)
-		if err != nil {
-			return clues.Wrap(err, "parsing exception event")
-		}
-
+	for _, evt := range exceptionOccurrences {
 		// OPTIMIZATION: We don't have to store any of the
 		// attachments that carry over from the original
 
-		var attachments []models.Attachmentable
+		var (
+			attachments []models.Attachmentable
+			err         error
+		)
+
 		if ptr.Val(event.GetHasAttachments()) || HasAttachments(event.GetBody()) {
 			attachments, err = client.GetAttachments(ctx, userID, ptr.Val(evt.GetId()))
 			if err != nil {
@@ -275,46 +263,30 @@ func fixupExceptionOccurrences(
 			}
 		}
 
-		// This odd roundabout way of doing this is required as
-		// the json serialization at the end does not serialize if
-		// you just pass in a models.Attachmentable
-		convertedAttachments := []map[string]any{}
-
-		for _, attachment := range attachments {
-			am, err := parseableToMap(attachment)
-			if err != nil {
-				return clues.Wrap(err, "converting attachment")
-			}
-
-			convertedAttachments = append(convertedAttachments, am)
-		}
-
-		instance["attachments"] = convertedAttachments
+		evt.SetAttachments(attachments)
 	}
+
+	event.SetExceptionOccurrences(exceptionOccurrences)
 
 	return nil
 }
 
+// GetCancelledEventDateStrings parses the start date out of each cancelled
+// occurrence identifier (format "<id>.<date>") on a recurring event.
+//
+// cancelledOccurrences used to arrive only in AdditionalData, because the
+// fork fetched it from a beta-only Graph endpoint using a stable-SDK event
+// type with no typed field for it. The current Graph SDK has promoted
+// cancelledOccurrences to a typed []string field.
 func GetCancelledEventDateStrings(event models.Eventable) ([]string, error) {
-	cancelledOccurrences := event.GetAdditionalData()["cancelledOccurrences"]
-	if cancelledOccurrences == nil {
+	cancelledOccurrences := event.GetCancelledOccurrences()
+	if len(cancelledOccurrences) == 0 {
 		return nil, nil
-	}
-
-	co, ok := cancelledOccurrences.([]any)
-	if !ok {
-		return nil, clues.New("converting cancelledOccurrences to []any").
-			With("type", fmt.Sprintf("%T", cancelledOccurrences))
 	}
 
 	dates := []string{}
 
-	for _, instance := range co {
-		instance, err := str.AnyToString(instance)
-		if err != nil {
-			return nil, err
-		}
-
+	for _, instance := range cancelledOccurrences {
 		// There might be multiple `.` in the ID and hence >2
 		splits := strings.Split(instance, ".")
 		if len(splits) < 2 {
@@ -324,7 +296,7 @@ func GetCancelledEventDateStrings(event models.Eventable) ([]string, error) {
 
 		startStr := splits[len(splits)-1]
 
-		_, err = dttm.ParseTime(startStr)
+		_, err := dttm.ParseTime(startStr)
 		if err != nil {
 			return nil, clues.Wrap(err, "parsing cancelled event date").
 				With("instance", instance).
@@ -335,29 +307,6 @@ func GetCancelledEventDateStrings(event models.Eventable) ([]string, error) {
 	}
 
 	return dates, nil
-}
-
-func parseableToMap(att serialization.Parsable) (map[string]any, error) {
-	var item map[string]any
-
-	writer := kjson.NewJsonSerializationWriter()
-	defer writer.Close()
-
-	if err := writer.WriteObjectValue("", att); err != nil {
-		return nil, err
-	}
-
-	ats, err := writer.GetSerializedContent()
-	if err != nil {
-		return nil, err
-	}
-
-	err = json.Unmarshal(ats, &item)
-	if err != nil {
-		return nil, clues.Wrap(err, "unmarshalling serialized attachment")
-	}
-
-	return item, nil
 }
 
 func (c Events) GetAttachments(
@@ -667,20 +616,6 @@ func EventInfo(evt models.Eventable) *details.ExchangeInfo {
 		Created:     created,
 		Modified:    ptr.OrNow(evt.GetLastModifiedDateTime()),
 	}
-}
-
-func EventFromMap(ev map[string]any) (models.Eventable, error) {
-	instBytes, err := json.Marshal(ev)
-	if err != nil {
-		return nil, clues.Wrap(err, "marshaling event exception instance")
-	}
-
-	body, err := BytesToEventable(instBytes)
-	if err != nil {
-		return nil, clues.Wrap(err, "converting exception event bytes to Eventable")
-	}
-
-	return body, nil
 }
 
 func eventCollisionKeyProps() []string {
