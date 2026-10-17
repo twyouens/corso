@@ -15,6 +15,7 @@ import (
 	"github.com/kopia/kopia/snapshot/policy"
 	"github.com/kopia/kopia/snapshot/snapshotfs"
 	"github.com/kopia/kopia/snapshot/snapshotmaintenance"
+	"github.com/kopia/kopia/snapshot/upload"
 	"golang.org/x/exp/maps"
 	"golang.org/x/exp/slices"
 
@@ -379,9 +380,12 @@ func (w Wrapper) makeSnapshotWithRoot(
 				return err
 			}
 
-			// By default Uploader is best-attempt.
-			u := snapshotfs.NewUploader(rw)
-			progress.UploadProgress = u.Progress
+			// By default Uploader is best-attempt. Upstream moved the Uploader
+			// type (and its Progress interface, formerly
+			// snapshotfs.UploadProgress) out of snapshotfs into its own
+			// snapshot/upload package.
+			u := upload.NewUploader(rw)
+			progress.Progress = u.Progress
 			u.Progress = progress
 			u.CheckpointLabels = tags
 
