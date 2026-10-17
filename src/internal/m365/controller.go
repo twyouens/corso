@@ -106,6 +106,27 @@ func (ctrl *Controller) VerifyAccess(ctx context.Context) error {
 	return ctrl.AC.Access().GetToken(ctx)
 }
 
+// EnsureResourceHandler re-derives this controller's resource lookup
+// handler for serviceInOperation, overwriting whatever it was set to
+// before.
+//
+// A Controller is created once per repository connection and, in
+// pkg/repository's connectToM365, reused across every later call to
+// ConnectDataProvider on that same repository - which happens once per
+// backup, restore or export, each potentially naming a different service.
+// Without this, a Controller first created for one service (or for
+// path.UnknownService, which chunk 0.6's pkg/engine passes while opening a
+// repository before any backup has chosen a service yet) keeps that
+// service's resource handler forever, and PopulateProtectedResourceIDAndName
+// panics on a nil handler the first time a later call asks for a different
+// service. Confirmed live against the test tenant: pkg/engine opens a
+// repository (which connects a provider for path.UnknownService, since no
+// service is known yet) and then calls Backup with an Exchange selector,
+// which panicked on exactly this before this fix.
+func (ctrl *Controller) EnsureResourceHandler(serviceInOperation path.ServiceType) {
+	ctrl.setResourceHandler(serviceInOperation)
+}
+
 func (ctrl *Controller) setResourceHandler(
 	serviceInOperation path.ServiceType,
 ) {

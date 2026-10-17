@@ -120,10 +120,15 @@ func mailboxSelector(userID string) selectors.Selector {
 
 func filesystemStorage(t *testing.T, passphrase string) storage.Storage {
 	t.Helper()
+	return filesystemStorageAt(t, filepath.Join(t.TempDir(), "repo"), passphrase)
+}
+
+func filesystemStorageAt(t *testing.T, path, passphrase string) storage.Storage {
+	t.Helper()
 
 	st, err := storage.NewStorage(
 		storage.ProviderFilesystem,
-		&storage.FilesystemConfig{Path: filepath.Join(t.TempDir(), "repo")},
+		&storage.FilesystemConfig{Path: path},
 		storage.CommonConfig{Corso: credentials.Corso{CorsoPassphrase: passphrase}})
 	require.NoError(t, err, clues.ToCore(err))
 
@@ -145,8 +150,11 @@ func (suite *EngineIntegrationSuite) TestOpenRepository_Filesystem() {
 	cfg := engineTestConfig(t, manifestPath)
 	acct := engineTestAccount(t, cfg)
 
+	repoPath := filepath.Join(t.TempDir(), "repo")
+	passphrase := "corso-0.6-engine-fs-" + uuid.NewString()
+
 	repoCfg := engine.RepositoryConfig{
-		Storage: filesystemStorage(t, "corso-0.6-engine-fs-"+uuid.NewString()),
+		Storage: filesystemStorageAt(t, repoPath, passphrase),
 		Account: acct,
 		Options: control.DefaultOptions(),
 	}
@@ -160,7 +168,10 @@ func (suite *EngineIntegrationSuite) TestOpenRepository_Filesystem() {
 	require.NoError(t, repo.Close(ctx))
 
 	// Re-opening with the exact same caller-supplied storage and key must
-	// reach the same repository.
+	// reach the same repository, with the same ID - not a freshly minted
+	// one. (Without passing the fork's own events.RepoIDNotFound sentinel
+	// through to repository.New on this path, this used to report a
+	// different, meaningless ID every time; see pkg/engine/repository.go.)
 	reopened, err := engine.OpenRepository(ctx, repoCfg)
 	require.NoError(t, err, clues.ToCore(err))
 
@@ -168,10 +179,22 @@ func (suite *EngineIntegrationSuite) TestOpenRepository_Filesystem() {
 
 	assert.Equal(t, id, reopened.ID())
 
-	// Initializing a second time at the same configuration must fail with
-	// ErrRepositoryExists, not silently succeed or corrupt the existing
-	// repository.
-	_, err = engine.InitializeRepository(ctx, repoCfg)
+	// Initializing again with the SAME correct passphrase is a safe
+	// reconnect, not an error - this is the fork's own Initialize
+	// behavior (see InitializeRepository's doc comment), confirmed live
+	// here rather than assumed.
+	reinitialized, err := engine.InitializeRepository(ctx, repoCfg)
+	require.NoError(t, err, clues.ToCore(err))
+	assert.Equal(t, id, reinitialized.ID())
+	require.NoError(t, reinitialized.Close(ctx))
+
+	// Initializing with the WRONG passphrase against the same already-
+	// existing repository must fail with ErrRepositoryExists, never
+	// silently connect or corrupt the repository.
+	wrongPassphraseCfg := repoCfg
+	wrongPassphraseCfg.Storage = filesystemStorageAt(t, repoPath, "wrong-"+passphrase)
+
+	_, err = engine.InitializeRepository(ctx, wrongPassphraseCfg)
 	assert.ErrorIs(t, err, engine.ErrRepositoryExists)
 }
 

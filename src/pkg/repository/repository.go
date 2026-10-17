@@ -317,6 +317,38 @@ func (r *repository) setupKopia(
 		return clues.StackWC(ctx, err)
 	}
 
+	if isInitialize {
+		// Persist this repository's own ID into its model store, the one
+		// place every later Connect/Open (see the events.RepoIDNotFound
+		// branch below) can read it back from - without this, GetID()
+		// after a fresh OpenRepository always came back empty, since
+		// nothing ever wrote a repositoryModel in the first place.
+		// Confirmed live against the test tenant via pkg/engine's
+		// filesystem round-trip test.
+		//
+		// kopiaRef.Initialize above silently reconnects, rather than
+		// erroring, when a repository already exists at this storage
+		// location and the given passphrase is correct (see its own doc
+		// comment in internal/kopia/conn.go) - in that case r.ID is a
+		// fresh, meaningless ID this call's repository.New minted, and a
+		// repositoryModel already exists from whenever the repository was
+		// genuinely first created. Check for that existing model first,
+		// and adopt its ID instead of overwriting it with a second,
+		// conflicting one.
+		rm, err := getRepoModel(ctx, r.modelStore)
+		if err != nil {
+			return clues.Wrap(err, "checking for an existing repository id")
+		}
+
+		if len(rm.ID) == 0 {
+			if err := newRepoModel(ctx, r.modelStore, r.ID); err != nil {
+				return clues.Wrap(err, "persisting repository id")
+			}
+		} else {
+			r.ID = string(rm.ID)
+		}
+	}
+
 	if r.ID == events.RepoIDNotFound {
 		rm, err := getRepoModel(ctx, r.modelStore)
 		if err != nil {

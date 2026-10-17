@@ -87,6 +87,16 @@ func connectToM365(
 			return nil, clues.New("Attempted to connect to multiple data providers")
 		}
 
+		// A reused controller may have been created for a different (or, for
+		// a repository opened before any backup chose a service, an
+		// unknown) service. Re-derive its resource handler for pst every
+		// time, not just on first creation, so a repository instance used
+		// for more than one service in its lifetime - which pkg/engine
+		// deliberately allows, by connecting a provider before any Backup
+		// call is made - never carries over a stale or nil handler. See
+		// Controller.EnsureResourceHandler's doc comment.
+		ctrl.EnsureResourceHandler(pst)
+
 		return ctrl, nil
 	}
 

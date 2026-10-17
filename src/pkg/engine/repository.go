@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/twyouens/corso/src/internal/events"
 	"github.com/twyouens/corso/src/pkg/account"
 	"github.com/twyouens/corso/src/pkg/control"
 	"github.com/twyouens/corso/src/pkg/count"
@@ -73,11 +74,23 @@ func (r *Repository) ID() string {
 // exactly, so this package does not try to route around it. A test that
 // only cares about the storage round trip still needs a valid cfg.Account.
 //
-// Returns ErrRepositoryExists (wrapping the fork's own
-// repository.ErrorRepoAlreadyExists) if a repository already exists at
-// this configuration; call OpenRepository instead.
+// Calling this again at a configuration that already has a repository is
+// safe as long as cfg.Storage's CorsoPassphrase is the same one the
+// repository was created with: the fork's own Initialize treats that as a
+// reconnect, not an error, so this returns the same repository (same ID)
+// rather than failing - confirmed live against the test tenant. It is
+// ErrRepositoryExists (wrapping the fork's own
+// repository.ErrorRepoAlreadyExists) only when the repository already
+// exists AND the connection that follows fails - in practice, a wrong
+// CorsoPassphrase for an existing repository. OpenRepository is still the
+// right call when the caller already knows a repository exists; this
+// behavior exists so a caller unsure whether it does can use
+// InitializeRepository either way without special-casing "already
+// exists".
 func InitializeRepository(ctx context.Context, cfg RepositoryConfig) (*Repository, error) {
-	repo, counter, err := newRepo(ctx, cfg)
+	// repository.NewRepoID ("") tells the fork to mint a brand-new random
+	// ID for this, the first-ever connection to this repository.
+	repo, counter, err := newRepo(ctx, cfg, repository.NewRepoID)
 	if err != nil {
 		return nil, err
 	}
@@ -98,7 +111,18 @@ func InitializeRepository(ctx context.Context, cfg RepositoryConfig) (*Repositor
 // CorsoPassphrase key. See InitializeRepository's doc comment for why
 // cfg.Account is required even for a storage-only use.
 func OpenRepository(ctx context.Context, cfg RepositoryConfig) (*Repository, error) {
-	repo, counter, err := newRepo(ctx, cfg)
+	// events.RepoIDNotFound is the fork's own sentinel (distinct from the
+	// empty string used above) telling setupKopia this caller does not
+	// already know the repository's ID, so it must read the real one back
+	// from the repository's own stored model instead of trusting whatever
+	// was passed in. Passing "" here (as the CLI's own config-file-less
+	// path never does - see cli/repo/filesystem.go) would instead leave
+	// the ID at a freshly minted random value every single call, so two
+	// Repository handles opened against the exact same repository would
+	// each report a different, meaningless ID. Confirmed live against the
+	// test tenant: this was the before-fix behavior, caught by a round
+	// trip test asserting the ID survives Close+OpenRepository.
+	repo, counter, err := newRepo(ctx, cfg, events.RepoIDNotFound)
 	if err != nil {
 		return nil, err
 	}
@@ -110,13 +134,13 @@ func OpenRepository(ctx context.Context, cfg RepositoryConfig) (*Repository, err
 	return &Repository{repo: repo, counter: counter}, nil
 }
 
-func newRepo(ctx context.Context, cfg RepositoryConfig) (repository.Repositoryer, *count.Bus, error) {
+func newRepo(ctx context.Context, cfg RepositoryConfig, repoID string) (repository.Repositoryer, *count.Bus, error) {
 	repo, err := repository.New(
 		ctx,
 		cfg.Account,
 		cfg.Storage,
 		cfg.Options,
-		repository.NewRepoID)
+		repoID)
 	if err != nil {
 		return nil, nil, fmt.Errorf("engine: constructing repository: %w", err)
 	}
