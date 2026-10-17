@@ -7,8 +7,8 @@ import (
 	"github.com/stretchr/testify/suite"
 	"golang.org/x/exp/maps"
 
-	"github.com/alcionai/corso/src/internal/common/prefixmatcher"
-	"github.com/alcionai/corso/src/internal/tester"
+	"github.com/twyouens/corso/src/internal/common/prefixmatcher"
+	"github.com/twyouens/corso/src/internal/tester"
 )
 
 type StringSetUnitSuite struct {

@@ -7,30 +7,28 @@ import (
 	"time"
 
 	"github.com/alcionai/clues"
-	"github.com/google/uuid"
 
-	"github.com/alcionai/corso/src/internal/archive"
-	"github.com/alcionai/corso/src/internal/common/crash"
-	"github.com/alcionai/corso/src/internal/data"
-	"github.com/alcionai/corso/src/internal/diagnostics"
-	"github.com/alcionai/corso/src/internal/events"
-	"github.com/alcionai/corso/src/internal/kopia"
-	"github.com/alcionai/corso/src/internal/model"
-	"github.com/alcionai/corso/src/internal/observe"
-	"github.com/alcionai/corso/src/internal/operations/inject"
-	"github.com/alcionai/corso/src/internal/stats"
-	"github.com/alcionai/corso/src/internal/streamstore"
-	"github.com/alcionai/corso/src/pkg/account"
-	"github.com/alcionai/corso/src/pkg/control"
-	"github.com/alcionai/corso/src/pkg/count"
-	"github.com/alcionai/corso/src/pkg/dttm"
-	"github.com/alcionai/corso/src/pkg/export"
-	"github.com/alcionai/corso/src/pkg/fault"
-	"github.com/alcionai/corso/src/pkg/logger"
-	"github.com/alcionai/corso/src/pkg/metrics"
-	"github.com/alcionai/corso/src/pkg/path"
-	"github.com/alcionai/corso/src/pkg/selectors"
-	"github.com/alcionai/corso/src/pkg/store"
+	"github.com/twyouens/corso/src/internal/archive"
+	"github.com/twyouens/corso/src/internal/common/crash"
+	"github.com/twyouens/corso/src/internal/data"
+	"github.com/twyouens/corso/src/internal/diagnostics"
+	"github.com/twyouens/corso/src/internal/events"
+	"github.com/twyouens/corso/src/internal/kopia"
+	"github.com/twyouens/corso/src/internal/model"
+	"github.com/twyouens/corso/src/internal/observe"
+	"github.com/twyouens/corso/src/internal/operations/inject"
+	"github.com/twyouens/corso/src/internal/stats"
+	"github.com/twyouens/corso/src/internal/streamstore"
+	"github.com/twyouens/corso/src/pkg/account"
+	"github.com/twyouens/corso/src/pkg/control"
+	"github.com/twyouens/corso/src/pkg/count"
+	"github.com/twyouens/corso/src/pkg/export"
+	"github.com/twyouens/corso/src/pkg/fault"
+	"github.com/twyouens/corso/src/pkg/logger"
+	"github.com/twyouens/corso/src/pkg/metrics"
+	"github.com/twyouens/corso/src/pkg/path"
+	"github.com/twyouens/corso/src/pkg/selectors"
+	"github.com/twyouens/corso/src/pkg/store"
 )
 
 const (
@@ -65,10 +63,9 @@ func NewExportOperation(
 	backupID model.StableID,
 	sel selectors.Selector,
 	exportCfg control.ExportConfig,
-	bus events.Eventer,
 ) (ExportOperation, error) {
 	op := ExportOperation{
-		operation: newOperation(opts, bus, count.New(), kw, sw),
+		operation: newOperation(opts, count.New(), kw, sw),
 		acct:      acct,
 		BackupID:  backupID,
 		ExportCfg: exportCfg,
@@ -100,9 +97,6 @@ type exportStats struct {
 	cs            []data.RestoreCollection
 	bytesRead     *stats.ByteCounter
 	resourceCount int
-
-	// a transient value only used to pair up start-end events.
-	exportID string
 }
 
 // Run begins a synchronous export operation.
@@ -119,7 +113,6 @@ func (op *ExportOperation) Run(ctx context.Context) (
 	var (
 		opStats = exportStats{
 			bytesRead: &stats.ByteCounter{},
-			exportID:  uuid.NewString(),
 		}
 		start  = time.Now()
 		sstore = streamstore.NewStreamer(op.kopia, op.acct.ID(), op.Selectors.PathService())
@@ -150,25 +143,6 @@ func (op *ExportOperation) Run(ctx context.Context) (
 		"backup_id", op.BackupID,
 		"service", op.Selectors.Service,
 		"categories", cats)
-
-	defer func() {
-		op.bus.Event(
-			ctx,
-			events.ExportEnd,
-			map[string]any{
-				events.BackupID:      op.BackupID,
-				events.DataRetrieved: op.Results.BytesRead,
-				events.Duration:      op.Results.CompletedAt.Sub(op.Results.StartedAt),
-				events.EndTime:       dttm.Format(op.Results.CompletedAt),
-				events.ItemsRead:     op.Results.ItemsRead,
-				events.ItemsWritten:  op.Results.ItemsWritten,
-				events.Resources:     op.Results.ResourceOwners,
-				events.ExportID:      opStats.exportID,
-				events.Service:       op.Selectors.Service.String(),
-				events.StartTime:     dttm.Format(op.Results.StartedAt),
-				events.Status:        op.Status.String(),
-			})
-	}()
 
 	// -----
 	// Execution

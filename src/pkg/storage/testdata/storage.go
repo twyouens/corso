@@ -7,11 +7,11 @@ import (
 	"github.com/alcionai/clues"
 	"github.com/stretchr/testify/require"
 
-	"github.com/alcionai/corso/src/internal/common/str"
-	"github.com/alcionai/corso/src/internal/tester"
-	"github.com/alcionai/corso/src/internal/tester/tconfig"
-	"github.com/alcionai/corso/src/pkg/credentials"
-	"github.com/alcionai/corso/src/pkg/storage"
+	"github.com/twyouens/corso/src/internal/common/str"
+	"github.com/twyouens/corso/src/internal/tester"
+	"github.com/twyouens/corso/src/internal/tester/tconfig"
+	"github.com/twyouens/corso/src/pkg/credentials"
+	"github.com/twyouens/corso/src/pkg/storage"
 )
 
 const testRepoRootPrefix = "corso_integration_test/"

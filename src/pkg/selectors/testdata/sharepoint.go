@@ -1,7 +1,7 @@
 package testdata
 
 import (
-	"github.com/alcionai/corso/src/pkg/selectors"
+	"github.com/twyouens/corso/src/pkg/selectors"
 )
 
 const TestListName = "test-list"

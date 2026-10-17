@@ -11,8 +11,8 @@ import (
 	"github.com/stretchr/testify/suite"
 	"golang.org/x/exp/slices"
 
-	"github.com/alcionai/corso/src/internal/common/readers"
-	"github.com/alcionai/corso/src/internal/tester"
+	"github.com/twyouens/corso/src/internal/common/readers"
+	"github.com/twyouens/corso/src/internal/tester"
 )
 
 type shortReader struct {

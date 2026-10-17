@@ -8,17 +8,17 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
-	"github.com/alcionai/corso/src/cli"
-	"github.com/alcionai/corso/src/cli/flags"
-	cliTD "github.com/alcionai/corso/src/cli/testdata"
-	"github.com/alcionai/corso/src/internal/tester"
-	"github.com/alcionai/corso/src/internal/tester/tconfig"
-	"github.com/alcionai/corso/src/pkg/account"
-	"github.com/alcionai/corso/src/pkg/config"
-	"github.com/alcionai/corso/src/pkg/control"
-	"github.com/alcionai/corso/src/pkg/repository"
-	"github.com/alcionai/corso/src/pkg/storage"
-	storeTD "github.com/alcionai/corso/src/pkg/storage/testdata"
+	"github.com/twyouens/corso/src/cli"
+	"github.com/twyouens/corso/src/cli/flags"
+	cliTD "github.com/twyouens/corso/src/cli/testdata"
+	"github.com/twyouens/corso/src/internal/tester"
+	"github.com/twyouens/corso/src/internal/tester/tconfig"
+	"github.com/twyouens/corso/src/pkg/account"
+	"github.com/twyouens/corso/src/pkg/config"
+	"github.com/twyouens/corso/src/pkg/control"
+	"github.com/twyouens/corso/src/pkg/repository"
+	"github.com/twyouens/corso/src/pkg/storage"
+	storeTD "github.com/twyouens/corso/src/pkg/storage/testdata"
 )
 
 type FilesystemE2ESuite struct {

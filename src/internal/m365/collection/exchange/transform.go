@@ -7,7 +7,7 @@ import (
 	"github.com/alcionai/clues"
 	"github.com/microsoftgraph/msgraph-sdk-go/models"
 
-	"github.com/alcionai/corso/src/internal/common/ptr"
+	"github.com/twyouens/corso/src/internal/common/ptr"
 )
 
 //==========================================================

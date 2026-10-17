@@ -9,21 +9,21 @@ import (
 	"github.com/google/uuid"
 	"github.com/pkg/errors"
 
-	"github.com/alcionai/corso/src/internal/common/crash"
-	"github.com/alcionai/corso/src/internal/data"
-	"github.com/alcionai/corso/src/internal/events"
-	"github.com/alcionai/corso/src/internal/kopia"
-	"github.com/alcionai/corso/src/internal/model"
-	"github.com/alcionai/corso/src/internal/observe"
-	"github.com/alcionai/corso/src/internal/operations"
-	"github.com/alcionai/corso/src/pkg/account"
-	"github.com/alcionai/corso/src/pkg/control"
-	ctrlRepo "github.com/alcionai/corso/src/pkg/control/repository"
-	"github.com/alcionai/corso/src/pkg/count"
-	"github.com/alcionai/corso/src/pkg/logger"
-	"github.com/alcionai/corso/src/pkg/path"
-	"github.com/alcionai/corso/src/pkg/storage"
-	"github.com/alcionai/corso/src/pkg/store"
+	"github.com/twyouens/corso/src/internal/common/crash"
+	"github.com/twyouens/corso/src/internal/data"
+	"github.com/twyouens/corso/src/internal/events"
+	"github.com/twyouens/corso/src/internal/kopia"
+	"github.com/twyouens/corso/src/internal/model"
+	"github.com/twyouens/corso/src/internal/observe"
+	"github.com/twyouens/corso/src/internal/operations"
+	"github.com/twyouens/corso/src/pkg/account"
+	"github.com/twyouens/corso/src/pkg/control"
+	ctrlRepo "github.com/twyouens/corso/src/pkg/control/repository"
+	"github.com/twyouens/corso/src/pkg/count"
+	"github.com/twyouens/corso/src/pkg/logger"
+	"github.com/twyouens/corso/src/pkg/path"
+	"github.com/twyouens/corso/src/pkg/storage"
+	"github.com/twyouens/corso/src/pkg/store"
 )
 
 const NewRepoID = ""
@@ -80,7 +80,6 @@ type repository struct {
 	Provider DataProvider // the client controller used for external user data CRUD
 
 	counter    *count.Bus
-	Bus        events.Eventer
 	dataLayer  *kopia.Wrapper
 	modelStore *kopia.ModelStore
 }
@@ -97,23 +96,10 @@ func New(
 	opts control.Options,
 	configFileRepoID string,
 ) (singleRepo *repository, err error) {
-	ctx = clues.Add(
-		ctx,
-		"acct_provider", acct.Provider.String(),
-		"acct_id", clues.Hide(acct.ID()),
-		"storage_provider", st.Provider.String())
-
-	bus, err := events.NewBus(ctx, st, acct.ID(), opts)
-	if err != nil {
-		return nil, clues.WrapWC(ctx, err, "constructing event bus")
-	}
-
 	repoID := configFileRepoID
 	if len(configFileRepoID) == 0 {
 		repoID = newRepoID(st)
 	}
-
-	bus.SetRepoID(repoID)
 
 	r := repository{
 		ID:      repoID,
@@ -121,12 +107,7 @@ func New(
 		Account: acct,
 		Storage: st,
 		counter: count.New(),
-		Bus:     bus,
 		Opts:    opts,
-	}
-
-	if !r.Opts.DisableMetrics {
-		bus.SetRepoID(r.ID)
 	}
 
 	return &r, nil
@@ -159,13 +140,7 @@ func (r *repository) Initialize(ctx context.Context, cfg InitConfig) (err error)
 
 	observe.Message(ctx, observe.ProgressCfg{}, "Initializing repository")
 
-	if err := r.setupKopia(ctx, cfg.RetentionOpts, true); err != nil {
-		return err
-	}
-
-	r.Bus.Event(ctx, events.RepoInit, nil)
-
-	return nil
+	return r.setupKopia(ctx, cfg.RetentionOpts, true)
 }
 
 type ConnConfig struct {
@@ -197,8 +172,6 @@ func (r *repository) Connect(ctx context.Context, cfg ConnConfig) (err error) {
 	if err := r.setupKopia(ctx, ctrlRepo.Retention{}, false); err != nil {
 		return clues.Stack(err)
 	}
-
-	r.Bus.Event(ctx, events.RepoConnect, nil)
 
 	return nil
 }
@@ -238,10 +211,6 @@ func (r *repository) UpdatePassword(ctx context.Context, password string) (err e
 }
 
 func (r *repository) Close(ctx context.Context) error {
-	if err := r.Bus.Close(); err != nil {
-		logger.Ctx(ctx).With("err", err).Debugw("closing the event bus", clues.In(ctx).Slice()...)
-	}
-
 	if r.dataLayer != nil {
 		if err := r.dataLayer.Close(ctx); err != nil {
 			logger.Ctx(ctx).With("err", err).Debugw("closing Datalayer", clues.In(ctx).Slice()...)
@@ -270,8 +239,7 @@ func (r repository) NewMaintenance(
 		r.Opts,
 		r.dataLayer,
 		store.NewWrapper(r.modelStore),
-		mOpts,
-		r.Bus)
+		mOpts)
 }
 
 func (r repository) NewRetentionConfig(
@@ -282,8 +250,7 @@ func (r repository) NewRetentionConfig(
 		ctx,
 		r.Opts,
 		r.dataLayer,
-		rcOpts,
-		r.Bus)
+		rcOpts)
 }
 
 func (r repository) NewPersistentConfig(
@@ -294,8 +261,7 @@ func (r repository) NewPersistentConfig(
 		ctx,
 		r.Opts,
 		r.dataLayer,
-		configOpts,
-		r.Bus)
+		configOpts)
 }
 
 func (r repository) Counter() *count.Bus {

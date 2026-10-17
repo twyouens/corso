@@ -3,7 +3,7 @@ package mock
 import (
 	"github.com/microsoftgraph/msgraph-sdk-go/models"
 
-	"github.com/alcionai/corso/src/pkg/services/m365/api"
+	"github.com/twyouens/corso/src/pkg/services/m365/api"
 )
 
 func UserSettings() models.Userable {

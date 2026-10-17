@@ -5,7 +5,7 @@ import (
 
 	"github.com/alcionai/clues"
 
-	"github.com/alcionai/corso/src/pkg/path"
+	"github.com/twyouens/corso/src/pkg/path"
 )
 
 type ItemType int

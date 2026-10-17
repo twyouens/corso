@@ -14,32 +14,30 @@ import (
 	"github.com/stretchr/testify/require"
 	"golang.org/x/exp/maps"
 
-	inMock "github.com/alcionai/corso/src/internal/common/idname/mock"
-	"github.com/alcionai/corso/src/internal/common/ptr"
-	"github.com/alcionai/corso/src/internal/common/syncd"
-	"github.com/alcionai/corso/src/internal/events"
-	evmock "github.com/alcionai/corso/src/internal/events/mock"
-	"github.com/alcionai/corso/src/internal/m365"
-	"github.com/alcionai/corso/src/internal/m365/collection/drive"
-	"github.com/alcionai/corso/src/internal/m365/collection/drive/metadata"
-	odConsts "github.com/alcionai/corso/src/internal/m365/service/onedrive/consts"
-	"github.com/alcionai/corso/src/internal/tester"
-	"github.com/alcionai/corso/src/internal/tester/its"
-	"github.com/alcionai/corso/src/internal/tester/tconfig"
-	"github.com/alcionai/corso/src/internal/version"
-	"github.com/alcionai/corso/src/pkg/backup/details"
-	deeTD "github.com/alcionai/corso/src/pkg/backup/details/testdata"
-	bupMD "github.com/alcionai/corso/src/pkg/backup/metadata"
-	"github.com/alcionai/corso/src/pkg/control"
-	ctrlTD "github.com/alcionai/corso/src/pkg/control/testdata"
-	"github.com/alcionai/corso/src/pkg/count"
-	"github.com/alcionai/corso/src/pkg/dttm"
-	"github.com/alcionai/corso/src/pkg/extensions"
-	"github.com/alcionai/corso/src/pkg/fault"
-	"github.com/alcionai/corso/src/pkg/path"
-	"github.com/alcionai/corso/src/pkg/selectors"
-	selTD "github.com/alcionai/corso/src/pkg/selectors/testdata"
-	"github.com/alcionai/corso/src/pkg/services/m365/api"
+	inMock "github.com/twyouens/corso/src/internal/common/idname/mock"
+	"github.com/twyouens/corso/src/internal/common/ptr"
+	"github.com/twyouens/corso/src/internal/common/syncd"
+	"github.com/twyouens/corso/src/internal/m365"
+	"github.com/twyouens/corso/src/internal/m365/collection/drive"
+	"github.com/twyouens/corso/src/internal/m365/collection/drive/metadata"
+	odConsts "github.com/twyouens/corso/src/internal/m365/service/onedrive/consts"
+	"github.com/twyouens/corso/src/internal/tester"
+	"github.com/twyouens/corso/src/internal/tester/its"
+	"github.com/twyouens/corso/src/internal/tester/tconfig"
+	"github.com/twyouens/corso/src/internal/version"
+	"github.com/twyouens/corso/src/pkg/backup/details"
+	deeTD "github.com/twyouens/corso/src/pkg/backup/details/testdata"
+	bupMD "github.com/twyouens/corso/src/pkg/backup/metadata"
+	"github.com/twyouens/corso/src/pkg/control"
+	ctrlTD "github.com/twyouens/corso/src/pkg/control/testdata"
+	"github.com/twyouens/corso/src/pkg/count"
+	"github.com/twyouens/corso/src/pkg/dttm"
+	"github.com/twyouens/corso/src/pkg/extensions"
+	"github.com/twyouens/corso/src/pkg/fault"
+	"github.com/twyouens/corso/src/pkg/path"
+	"github.com/twyouens/corso/src/pkg/selectors"
+	selTD "github.com/twyouens/corso/src/pkg/selectors/testdata"
+	"github.com/twyouens/corso/src/pkg/services/m365/api"
 )
 
 func RunBasicDriveishBackupTests(
@@ -55,15 +53,14 @@ func RunBasicDriveishBackupTests(
 
 	var (
 		tenID   = tconfig.M365TenantID(t)
-		mb      = evmock.NewBus()
 		counter = count.New()
 		ws      = deeTD.DriveIDFromRepoRef
 	)
 
-	bo, bod := PrepNewTestBackupOp(t, ctx, mb, sel, opts, version.Backup, counter)
+	bo, bod := PrepNewTestBackupOp(t, ctx, sel, opts, version.Backup, counter)
 	defer bod.Close(t, ctx)
 
-	RunAndCheckBackup(t, ctx, &bo, mb, false)
+	RunAndCheckBackup(t, ctx, &bo, false)
 
 	bID := bo.Results.BackupID
 
@@ -107,7 +104,6 @@ func RunIncrementalDriveishBackupTest(
 
 	var (
 		acct    = tconfig.NewM365Account(t)
-		mb      = evmock.NewBus()
 		counter = count.New()
 		ws      = deeTD.DriveIDFromRepoRef
 
@@ -260,13 +256,13 @@ func RunIncrementalDriveishBackupTest(
 			locRef)
 	}
 
-	bo, bod := PrepNewTestBackupOp(t, ctx, mb, sel, opts, version.Backup, counter)
+	bo, bod := PrepNewTestBackupOp(t, ctx, sel, opts, version.Backup, counter)
 	defer bod.Close(t, ctx)
 
 	sel = bod.Sel
 
 	// run the initial backup
-	RunAndCheckBackup(t, ctx, &bo, mb, false)
+	RunAndCheckBackup(t, ctx, &bo, false)
 
 	// precheck to ensure the expectedDeets are correct.
 	// if we fail here, the expectedDeets were populated incorrectly.
@@ -658,13 +654,11 @@ func RunIncrementalDriveishBackupTest(
 
 			var (
 				t       = suite.T()
-				incMB   = evmock.NewBus()
 				counter = count.New()
 				incBO   = NewTestBackupOp(
 					t,
 					ctx,
 					bod,
-					incMB,
 					opts,
 					counter)
 			)
@@ -757,7 +751,6 @@ func RunIncrementalDriveishBackupTest(
 
 			assert.NoError(t, incBO.Errors.Failure(), "incremental non-recoverable error", clues.ToCore(incBO.Errors.Failure()))
 			assert.Empty(t, incBO.Errors.Recovered(), "incremental recoverable/iteration errors")
-			assert.Equal(t, 1, incMB.TimesCalled[events.BackupEnd], "incremental backup-end events")
 		})
 	}
 }
@@ -775,17 +768,16 @@ func RunDriveishBackupWithExtensionsTests(
 
 	var (
 		tenID   = tconfig.M365TenantID(t)
-		mb      = evmock.NewBus()
 		counter = count.New()
 		ws      = deeTD.DriveIDFromRepoRef
 	)
 
 	opts.ItemExtensionFactory = GetTestExtensionFactories()
 
-	bo, bod := PrepNewTestBackupOp(t, ctx, mb, sel, opts, version.Backup, counter)
+	bo, bod := PrepNewTestBackupOp(t, ctx, sel, opts, version.Backup, counter)
 	defer bod.Close(t, ctx)
 
-	RunAndCheckBackup(t, ctx, &bo, mb, false)
+	RunAndCheckBackup(t, ctx, &bo, false)
 
 	bID := bo.Results.BackupID
 
@@ -876,7 +868,6 @@ func RunDriveAssistBaseGroupsUpdate(
 
 	var (
 		whatSet = deeTD.CategoryFromRepoRef
-		mb      = evmock.NewBus()
 		counter = count.New()
 		opts    = control.DefaultOptions()
 	)
@@ -890,7 +881,6 @@ func RunDriveAssistBaseGroupsUpdate(
 	bo, bod := PrepNewTestBackupOp(
 		t,
 		ctx,
-		mb,
 		sel,
 		opts,
 		version.All8MigrateUserPNToID,
@@ -928,7 +918,6 @@ func RunDriveAssistBaseGroupsUpdate(
 		defer flush()
 
 		var (
-			mb      = evmock.NewBus()
 			counter = count.New()
 			opts    = control.DefaultOptions()
 		)
@@ -937,12 +926,11 @@ func RunDriveAssistBaseGroupsUpdate(
 			t,
 			ctx,
 			bod,
-			mb,
 			opts,
 			counter)
 		forcedFull.BackupVersion = version.Groups9Update
 
-		RunAndCheckBackup(t, ctx, &forcedFull, mb, false)
+		RunAndCheckBackup(t, ctx, &forcedFull, false)
 
 		reasons, err := bod.Sel.Reasons(bod.Acct.ID(), false)
 		require.NoError(t, err, clues.ToCore(err))
@@ -1008,15 +996,14 @@ func RunDriveRestoreToAlternateProtectedResource(
 	// a backup is required to run restores
 
 	var (
-		mb      = evmock.NewBus()
 		counter = count.New()
 		opts    = control.DefaultOptions()
 	)
 
-	bo, bod := PrepNewTestBackupOp(t, ctx, mb, sel, opts, version.Backup, counter)
+	bo, bod := PrepNewTestBackupOp(t, ctx, sel, opts, version.Backup, counter)
 	defer bod.Close(t, ctx)
 
-	RunAndCheckBackup(t, ctx, &bo, mb, false)
+	RunAndCheckBackup(t, ctx, &bo, false)
 
 	var (
 		restoreCfg        = ctrlTD.DefaultRestoreConfig("drive_restore_to_resource")
@@ -1028,7 +1015,6 @@ func RunDriveRestoreToAlternateProtectedResource(
 	// first restore to the 'from' resource
 
 	suite.Run("restore original resource", func() {
-		mb = evmock.NewBus()
 		fromCtr := count.New()
 		driveID := driveFrom.DriveID
 		rootFolderID := driveFrom.DriveRootFolderID
@@ -1039,13 +1025,12 @@ func RunDriveRestoreToAlternateProtectedResource(
 			ctx,
 			bod.St,
 			bo.Results.BackupID,
-			mb,
 			fromCtr,
 			sel,
 			opts,
 			restoreCfg)
 
-		RunAndCheckRestore(t, ctx, &ro, mb, false)
+		RunAndCheckRestore(t, ctx, &ro, false)
 
 		// get all files in folder, use these as the base
 		// set of files to compare against.
@@ -1066,7 +1051,6 @@ func RunDriveRestoreToAlternateProtectedResource(
 	)
 
 	suite.Run("restore to alternate resource", func() {
-		mb = evmock.NewBus()
 		toCtr := count.New()
 		driveID := driveTo.DriveID
 		rootFolderID := driveTo.DriveRootFolderID
@@ -1077,13 +1061,12 @@ func RunDriveRestoreToAlternateProtectedResource(
 			ctx,
 			bod.St,
 			bo.Results.BackupID,
-			mb,
 			toCtr,
 			sel,
 			opts,
 			restoreCfg)
 
-		RunAndCheckRestore(t, ctx, &ro, mb, false)
+		RunAndCheckRestore(t, ctx, &ro, false)
 
 		// get all files in folder, use these as the base
 		// set of files to compare against.
@@ -1165,15 +1148,14 @@ func RunDriveRestoreWithAdvancedOptions(
 	// a backup is required to run restores
 
 	var (
-		mb      = evmock.NewBus()
 		counter = count.New()
 		opts    = control.DefaultOptions()
 	)
 
-	bo, bod := PrepNewTestBackupOp(t, ctx, mb, sel, opts, version.Backup, counter)
+	bo, bod := PrepNewTestBackupOp(t, ctx, sel, opts, version.Backup, counter)
 	defer bod.Close(t, ctx)
 
-	RunAndCheckBackup(t, ctx, &bo, mb, false)
+	RunAndCheckBackup(t, ctx, &bo, false)
 
 	var (
 		restoreCfg          = ctrlTD.DefaultRestoreConfig("drive_adv_restore")
@@ -1192,7 +1174,6 @@ func RunDriveRestoreWithAdvancedOptions(
 		ctx, flush := tester.NewContext(t)
 		defer flush()
 
-		mb := evmock.NewBus()
 		ctr := count.New()
 
 		restoreCfg.OnCollision = control.Copy
@@ -1202,13 +1183,12 @@ func RunDriveRestoreWithAdvancedOptions(
 			ctx,
 			bod.St,
 			bo.Results.BackupID,
-			mb,
 			ctr,
 			sel,
 			opts,
 			restoreCfg)
 
-		RunAndCheckRestore(t, ctx, &ro, mb, false)
+		RunAndCheckRestore(t, ctx, &ro, false)
 
 		// get all files in folder, use these as the base
 		// set of files to compare against.
@@ -1243,7 +1223,6 @@ func RunDriveRestoreWithAdvancedOptions(
 		ctx, flush := tester.NewContext(t)
 		defer flush()
 
-		mb := evmock.NewBus()
 		ctr := count.New()
 
 		restoreCfg.OnCollision = control.Skip
@@ -1253,13 +1232,12 @@ func RunDriveRestoreWithAdvancedOptions(
 			ctx,
 			bod.St,
 			bo.Results.BackupID,
-			mb,
 			ctr,
 			sel,
 			opts,
 			restoreCfg)
 
-		deets := RunAndCheckRestore(t, ctx, &ro, mb, false)
+		deets := RunAndCheckRestore(t, ctx, &ro, false)
 
 		CheckRestoreCounts(t, ctr, countItemsInRestore, 0, 0)
 		assert.Zero(
@@ -1294,7 +1272,6 @@ func RunDriveRestoreWithAdvancedOptions(
 		ctx, flush := tester.NewContext(t)
 		defer flush()
 
-		mb := evmock.NewBus()
 		ctr := count.New()
 
 		restoreCfg.OnCollision = control.Replace
@@ -1304,13 +1281,12 @@ func RunDriveRestoreWithAdvancedOptions(
 			ctx,
 			bod.St,
 			bo.Results.BackupID,
-			mb,
 			ctr,
 			sel,
 			opts,
 			restoreCfg)
 
-		deets := RunAndCheckRestore(t, ctx, &ro, mb, false)
+		deets := RunAndCheckRestore(t, ctx, &ro, false)
 		filtEnts := []details.Entry{}
 
 		for _, e := range deets.Entries {
@@ -1359,7 +1335,6 @@ func RunDriveRestoreWithAdvancedOptions(
 		ctx, flush := tester.NewContext(t)
 		defer flush()
 
-		mb := evmock.NewBus()
 		ctr := count.New()
 
 		restoreCfg.OnCollision = control.Copy
@@ -1369,13 +1344,12 @@ func RunDriveRestoreWithAdvancedOptions(
 			ctx,
 			bod.St,
 			bo.Results.BackupID,
-			mb,
 			ctr,
 			sel,
 			opts,
 			restoreCfg)
 
-		deets := RunAndCheckRestore(t, ctx, &ro, mb, false)
+		deets := RunAndCheckRestore(t, ctx, &ro, false)
 		filtEnts := []details.Entry{}
 
 		for _, e := range deets.Entries {

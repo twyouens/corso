@@ -4,7 +4,7 @@
 # It is not used for deployments.
 
 ## Build
-FROM golang:1.19 AS base
+FROM golang:1.27.2 AS base
 
 WORKDIR /src
 

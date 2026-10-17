@@ -7,10 +7,10 @@ import (
 
 	"github.com/alcionai/clues"
 
-	"github.com/alcionai/corso/src/internal/streamstore"
-	"github.com/alcionai/corso/src/pkg/backup/details"
-	"github.com/alcionai/corso/src/pkg/backup/identity"
-	"github.com/alcionai/corso/src/pkg/fault"
+	"github.com/twyouens/corso/src/internal/streamstore"
+	"github.com/twyouens/corso/src/pkg/backup/details"
+	"github.com/twyouens/corso/src/pkg/backup/identity"
+	"github.com/twyouens/corso/src/pkg/fault"
 )
 
 var _ streamstore.Streamer = &Streamer{}

@@ -14,19 +14,18 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
-	"github.com/alcionai/corso/src/internal/archive"
-	"github.com/alcionai/corso/src/internal/data"
-	evmock "github.com/alcionai/corso/src/internal/events/mock"
-	"github.com/alcionai/corso/src/internal/kopia"
-	"github.com/alcionai/corso/src/internal/m365/mock"
-	exchMock "github.com/alcionai/corso/src/internal/m365/service/exchange/mock"
-	"github.com/alcionai/corso/src/internal/stats"
-	"github.com/alcionai/corso/src/internal/tester"
-	"github.com/alcionai/corso/src/pkg/account"
-	"github.com/alcionai/corso/src/pkg/control"
-	"github.com/alcionai/corso/src/pkg/export"
-	"github.com/alcionai/corso/src/pkg/selectors"
-	"github.com/alcionai/corso/src/pkg/store"
+	"github.com/twyouens/corso/src/internal/archive"
+	"github.com/twyouens/corso/src/internal/data"
+	"github.com/twyouens/corso/src/internal/kopia"
+	"github.com/twyouens/corso/src/internal/m365/mock"
+	exchMock "github.com/twyouens/corso/src/internal/m365/service/exchange/mock"
+	"github.com/twyouens/corso/src/internal/stats"
+	"github.com/twyouens/corso/src/internal/tester"
+	"github.com/twyouens/corso/src/pkg/account"
+	"github.com/twyouens/corso/src/pkg/control"
+	"github.com/twyouens/corso/src/pkg/export"
+	"github.com/twyouens/corso/src/pkg/selectors"
+	"github.com/twyouens/corso/src/pkg/store"
 )
 
 type ExportUnitSuite struct {
@@ -100,8 +99,7 @@ func (suite *ExportUnitSuite) TestExportOperation_Export() {
 				account.Account{},
 				"foo",
 				selectors.Selector{DiscreteOwner: "test"},
-				exportCfg,
-				evmock.NewBus())
+				exportCfg)
 			require.NoError(t, err, clues.ToCore(err))
 
 			op.Errors.Fail(test.fail)

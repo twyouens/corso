@@ -9,8 +9,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
-	"github.com/alcionai/corso/src/cli/flags"
-	"github.com/alcionai/corso/src/internal/tester"
+	"github.com/twyouens/corso/src/cli/flags"
+	"github.com/twyouens/corso/src/internal/tester"
 )
 
 type FlagUnitSuite struct {

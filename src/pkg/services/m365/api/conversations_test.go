@@ -11,13 +11,13 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
-	"github.com/alcionai/corso/src/internal/common/ptr"
-	exchMock "github.com/alcionai/corso/src/internal/m365/service/exchange/mock"
-	stub "github.com/alcionai/corso/src/internal/m365/service/groups/mock"
-	"github.com/alcionai/corso/src/internal/tester"
-	"github.com/alcionai/corso/src/internal/tester/tconfig"
-	"github.com/alcionai/corso/src/pkg/backup/details"
-	graphTD "github.com/alcionai/corso/src/pkg/services/m365/api/graph/testdata"
+	"github.com/twyouens/corso/src/internal/common/ptr"
+	exchMock "github.com/twyouens/corso/src/internal/m365/service/exchange/mock"
+	stub "github.com/twyouens/corso/src/internal/m365/service/groups/mock"
+	"github.com/twyouens/corso/src/internal/tester"
+	"github.com/twyouens/corso/src/internal/tester/tconfig"
+	"github.com/twyouens/corso/src/pkg/backup/details"
+	graphTD "github.com/twyouens/corso/src/pkg/services/m365/api/graph/testdata"
 )
 
 // called by the pager test, since it is already enumerating

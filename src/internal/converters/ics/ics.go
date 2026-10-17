@@ -15,12 +15,12 @@ import (
 	"github.com/microsoftgraph/msgraph-sdk-go/models"
 	"jaytaylor.com/html2text"
 
-	"github.com/alcionai/corso/src/internal/common/ptr"
-	"github.com/alcionai/corso/src/internal/common/str"
-	"github.com/alcionai/corso/src/internal/converters/ics/tzdata"
-	"github.com/alcionai/corso/src/pkg/dttm"
-	"github.com/alcionai/corso/src/pkg/logger"
-	"github.com/alcionai/corso/src/pkg/services/m365/api"
+	"github.com/twyouens/corso/src/internal/common/ptr"
+	"github.com/twyouens/corso/src/internal/common/str"
+	"github.com/twyouens/corso/src/internal/converters/ics/tzdata"
+	"github.com/twyouens/corso/src/pkg/dttm"
+	"github.com/twyouens/corso/src/pkg/logger"
+	"github.com/twyouens/corso/src/pkg/services/m365/api"
 )
 
 // This package is used to convert json response from graph to ics

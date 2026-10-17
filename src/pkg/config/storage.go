@@ -8,10 +8,10 @@ import (
 	"github.com/alcionai/clues"
 	"github.com/spf13/viper"
 
-	"github.com/alcionai/corso/src/cli/flags"
-	"github.com/alcionai/corso/src/internal/common/str"
-	"github.com/alcionai/corso/src/pkg/credentials"
-	"github.com/alcionai/corso/src/pkg/storage"
+	"github.com/twyouens/corso/src/cli/flags"
+	"github.com/twyouens/corso/src/internal/common/str"
+	"github.com/twyouens/corso/src/pkg/credentials"
+	"github.com/twyouens/corso/src/pkg/storage"
 )
 
 // configureStorage builds a complete storage configuration from a mix of

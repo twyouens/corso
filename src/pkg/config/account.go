@@ -6,10 +6,10 @@ import (
 	"github.com/alcionai/clues"
 	"github.com/spf13/viper"
 
-	"github.com/alcionai/corso/src/cli/flags"
-	"github.com/alcionai/corso/src/internal/common/str"
-	"github.com/alcionai/corso/src/pkg/account"
-	"github.com/alcionai/corso/src/pkg/credentials"
+	"github.com/twyouens/corso/src/cli/flags"
+	"github.com/twyouens/corso/src/internal/common/str"
+	"github.com/twyouens/corso/src/pkg/account"
+	"github.com/twyouens/corso/src/pkg/credentials"
 )
 
 // prerequisite: readRepoConfig must have been run prior to this to populate the global viper values.

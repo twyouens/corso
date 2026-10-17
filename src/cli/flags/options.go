@@ -18,7 +18,6 @@ const (
 	FailedItemsFN                 = "failed-items"
 	FetchParallelismFN            = "fetch-parallelism"
 	NoPermissionsFN               = "no-permissions"
-	NoStatsFN                     = "no-stats"
 	RecoveredErrorsFN             = "recovered-errors"
 	RunModeFN                     = "run-mode"
 	SkippedItemsFN                = "skipped-items"
@@ -41,7 +40,6 @@ var (
 	ListSkippedItemsFV            string
 	ListRecoveredErrorsFV         string
 	NoPermissionsFV               bool
-	NoStatsFV                     bool
 	// RunMode describes the type of run, such as:
 	// flagtest, dry, run.  Should default to 'run'.
 	RunModeFV    string
@@ -53,12 +51,6 @@ const (
 	RunModeFlagTest = "flag-test"
 	RunModeRun      = "run"
 )
-
-// AddGlobalOperationFlags adds the global operations flag set.
-func AddGlobalOperationFlags(cmd *cobra.Command) {
-	fs := cmd.PersistentFlags()
-	fs.BoolVar(&NoStatsFV, NoStatsFN, false, "disable anonymous usage statistics gathering")
-}
 
 // AddFailFastFlag adds a flag to toggle fail-fast error handling behavior.
 func AddFailFastFlag(cmd *cobra.Command) {

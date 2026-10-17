@@ -15,13 +15,13 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
-	"github.com/alcionai/corso/src/internal/common/ptr"
-	"github.com/alcionai/corso/src/internal/converters/eml/testdata"
-	"github.com/alcionai/corso/src/internal/converters/ics"
-	"github.com/alcionai/corso/src/internal/m365/collection/groups/metadata"
-	stub "github.com/alcionai/corso/src/internal/m365/service/groups/mock"
-	"github.com/alcionai/corso/src/internal/tester"
-	"github.com/alcionai/corso/src/pkg/services/m365/api"
+	"github.com/twyouens/corso/src/internal/common/ptr"
+	"github.com/twyouens/corso/src/internal/converters/eml/testdata"
+	"github.com/twyouens/corso/src/internal/converters/ics"
+	"github.com/twyouens/corso/src/internal/m365/collection/groups/metadata"
+	stub "github.com/twyouens/corso/src/internal/m365/service/groups/mock"
+	"github.com/twyouens/corso/src/internal/tester"
+	"github.com/twyouens/corso/src/pkg/services/m365/api"
 )
 
 type EMLUnitSuite struct {

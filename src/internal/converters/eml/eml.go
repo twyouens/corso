@@ -20,12 +20,12 @@ import (
 	"github.com/microsoftgraph/msgraph-sdk-go/models"
 	mail "github.com/xhit/go-simple-mail/v2"
 
-	"github.com/alcionai/corso/src/internal/common/ptr"
-	"github.com/alcionai/corso/src/internal/common/str"
-	"github.com/alcionai/corso/src/internal/converters/ics"
-	"github.com/alcionai/corso/src/internal/m365/collection/groups/metadata"
-	"github.com/alcionai/corso/src/pkg/logger"
-	"github.com/alcionai/corso/src/pkg/services/m365/api"
+	"github.com/twyouens/corso/src/internal/common/ptr"
+	"github.com/twyouens/corso/src/internal/common/str"
+	"github.com/twyouens/corso/src/internal/converters/ics"
+	"github.com/twyouens/corso/src/internal/m365/collection/groups/metadata"
+	"github.com/twyouens/corso/src/pkg/logger"
+	"github.com/twyouens/corso/src/pkg/services/m365/api"
 )
 
 const (

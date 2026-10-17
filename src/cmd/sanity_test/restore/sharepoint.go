@@ -8,10 +8,10 @@ import (
 	"github.com/alcionai/clues"
 	"github.com/microsoftgraph/msgraph-sdk-go/models"
 
-	"github.com/alcionai/corso/src/cmd/sanity_test/common"
-	"github.com/alcionai/corso/src/cmd/sanity_test/driveish"
-	"github.com/alcionai/corso/src/internal/common/ptr"
-	"github.com/alcionai/corso/src/pkg/services/m365/api"
+	"github.com/twyouens/corso/src/cmd/sanity_test/common"
+	"github.com/twyouens/corso/src/cmd/sanity_test/driveish"
+	"github.com/twyouens/corso/src/internal/common/ptr"
+	"github.com/twyouens/corso/src/pkg/services/m365/api"
 )
 
 func CheckSharePointRestoration(

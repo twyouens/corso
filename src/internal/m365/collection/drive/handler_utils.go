@@ -3,8 +3,8 @@ package drive
 import (
 	"strings"
 
-	"github.com/alcionai/corso/src/internal/common/ptr"
-	"github.com/alcionai/corso/src/pkg/services/m365/custom"
+	"github.com/twyouens/corso/src/internal/common/ptr"
+	"github.com/twyouens/corso/src/pkg/services/m365/custom"
 )
 
 func getItemCreator(item *custom.DriveItem) string {

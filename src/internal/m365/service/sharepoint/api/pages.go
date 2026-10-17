@@ -8,13 +8,13 @@ import (
 
 	"github.com/alcionai/clues"
 
-	"github.com/alcionai/corso/src/internal/common/ptr"
-	"github.com/alcionai/corso/src/internal/data"
-	"github.com/alcionai/corso/src/internal/diagnostics"
-	"github.com/alcionai/corso/src/pkg/backup/details"
-	"github.com/alcionai/corso/src/pkg/fault"
-	betamodels "github.com/alcionai/corso/src/pkg/services/m365/api/graph/betasdk/models"
-	betasites "github.com/alcionai/corso/src/pkg/services/m365/api/graph/betasdk/sites"
+	"github.com/twyouens/corso/src/internal/common/ptr"
+	"github.com/twyouens/corso/src/internal/data"
+	"github.com/twyouens/corso/src/internal/diagnostics"
+	"github.com/twyouens/corso/src/pkg/backup/details"
+	"github.com/twyouens/corso/src/pkg/fault"
+	betamodels "github.com/twyouens/corso/src/pkg/services/m365/api/graph/betasdk/models"
+	betasites "github.com/twyouens/corso/src/pkg/services/m365/api/graph/betasdk/sites"
 )
 
 type NameID struct {

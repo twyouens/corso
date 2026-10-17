@@ -14,14 +14,14 @@ import (
 	"github.com/microsoftgraph/msgraph-sdk-go/models/odataerrors"
 	"github.com/pkg/errors"
 
-	"github.com/alcionai/corso/src/internal/common"
-	"github.com/alcionai/corso/src/internal/common/jwt"
-	"github.com/alcionai/corso/src/internal/common/ptr"
-	"github.com/alcionai/corso/src/internal/common/str"
-	"github.com/alcionai/corso/src/pkg/errs/core"
-	"github.com/alcionai/corso/src/pkg/fault"
-	"github.com/alcionai/corso/src/pkg/filters"
-	"github.com/alcionai/corso/src/pkg/services/m365/custom"
+	"github.com/twyouens/corso/src/internal/common"
+	"github.com/twyouens/corso/src/internal/common/jwt"
+	"github.com/twyouens/corso/src/internal/common/ptr"
+	"github.com/twyouens/corso/src/internal/common/str"
+	"github.com/twyouens/corso/src/pkg/errs/core"
+	"github.com/twyouens/corso/src/pkg/fault"
+	"github.com/twyouens/corso/src/pkg/filters"
+	"github.com/twyouens/corso/src/pkg/services/m365/custom"
 )
 
 // ---------------------------------------------------------------------------

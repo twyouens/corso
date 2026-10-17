@@ -12,7 +12,7 @@ usage() {
 }
 
 ROOT=$(dirname $(dirname $(readlink -f $0)))
-GOVER=1.21                           # go version
+GOVER=1.27.2                         # go version
 CORSO_BUILD_CACHE="/tmp/.corsobuild" # shared persistent cache
 
 # Figure out os and architecture
@@ -30,7 +30,7 @@ Darwin) GOOS="darwin" ;;
 esac
 
 PLATFORMS="$GOOS/$GOARCH" # default platform
-TAG="alcionai/corso"      # default image tag
+TAG="twyouens/corso"      # default image tag
 
 MODE="binary"
 case "$1" in

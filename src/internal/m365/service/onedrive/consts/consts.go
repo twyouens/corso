@@ -1,6 +1,6 @@
 package onedrive
 
-import "github.com/alcionai/corso/src/pkg/path"
+import "github.com/twyouens/corso/src/pkg/path"
 
 const (
 	SitesPathDir = "sites"

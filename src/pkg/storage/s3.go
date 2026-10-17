@@ -10,9 +10,9 @@ import (
 	"github.com/alcionai/clues"
 	"github.com/spf13/cast"
 
-	"github.com/alcionai/corso/src/internal/common"
-	"github.com/alcionai/corso/src/internal/common/str"
-	"github.com/alcionai/corso/src/pkg/credentials"
+	"github.com/twyouens/corso/src/internal/common"
+	"github.com/twyouens/corso/src/internal/common/str"
+	"github.com/twyouens/corso/src/pkg/credentials"
 )
 
 type S3Config struct {

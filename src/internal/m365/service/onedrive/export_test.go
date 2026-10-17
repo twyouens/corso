@@ -10,18 +10,18 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
 
-	"github.com/alcionai/corso/src/internal/data"
-	dataMock "github.com/alcionai/corso/src/internal/data/mock"
-	"github.com/alcionai/corso/src/internal/m365/collection/drive"
-	odConsts "github.com/alcionai/corso/src/internal/m365/service/onedrive/consts"
-	"github.com/alcionai/corso/src/internal/tester"
-	"github.com/alcionai/corso/src/internal/version"
-	"github.com/alcionai/corso/src/pkg/control"
-	"github.com/alcionai/corso/src/pkg/export"
-	"github.com/alcionai/corso/src/pkg/fault"
-	"github.com/alcionai/corso/src/pkg/metrics"
-	"github.com/alcionai/corso/src/pkg/path"
-	"github.com/alcionai/corso/src/pkg/services/m365/api"
+	"github.com/twyouens/corso/src/internal/data"
+	dataMock "github.com/twyouens/corso/src/internal/data/mock"
+	"github.com/twyouens/corso/src/internal/m365/collection/drive"
+	odConsts "github.com/twyouens/corso/src/internal/m365/service/onedrive/consts"
+	"github.com/twyouens/corso/src/internal/tester"
+	"github.com/twyouens/corso/src/internal/version"
+	"github.com/twyouens/corso/src/pkg/control"
+	"github.com/twyouens/corso/src/pkg/export"
+	"github.com/twyouens/corso/src/pkg/fault"
+	"github.com/twyouens/corso/src/pkg/metrics"
+	"github.com/twyouens/corso/src/pkg/path"
+	"github.com/twyouens/corso/src/pkg/services/m365/api"
 )
 
 type ExportUnitSuite struct {
@@ -77,7 +77,7 @@ func (suite *ExportUnitSuite) TestGetItems() {
 				{
 					ID:   "name1",
 					Name: "name1",
-					Body: io.NopCloser((bytes.NewBufferString("body1"))),
+					Body: io.NopCloser(bytes.NewBufferString("body1")),
 				},
 			},
 		},
@@ -102,12 +102,12 @@ func (suite *ExportUnitSuite) TestGetItems() {
 				{
 					ID:   "name1",
 					Name: "name1",
-					Body: io.NopCloser((bytes.NewBufferString("body1"))),
+					Body: io.NopCloser(bytes.NewBufferString("body1")),
 				},
 				{
 					ID:   "name2",
 					Name: "name2",
-					Body: io.NopCloser((bytes.NewBufferString("body2"))),
+					Body: io.NopCloser(bytes.NewBufferString("body2")),
 				},
 			},
 		},
@@ -128,7 +128,7 @@ func (suite *ExportUnitSuite) TestGetItems() {
 				{
 					ID:   "name1.data",
 					Name: "name1",
-					Body: io.NopCloser((bytes.NewBufferString("body1"))),
+					Body: io.NopCloser(bytes.NewBufferString("body1")),
 				},
 			},
 		},
@@ -150,7 +150,7 @@ func (suite *ExportUnitSuite) TestGetItems() {
 				{
 					ID:   "id1.data",
 					Name: "name1",
-					Body: io.NopCloser((bytes.NewBufferString("body1"))),
+					Body: io.NopCloser(bytes.NewBufferString("body1")),
 				},
 			},
 		},
@@ -318,7 +318,7 @@ func (suite *ExportUnitSuite) TestExportRestoreCollections() {
 			{
 				ID:   "id1.data",
 				Name: "name1",
-				Body: io.NopCloser((bytes.NewBufferString("body1"))),
+				Body: io.NopCloser(bytes.NewBufferString("body1")),
 			},
 		}
 	)

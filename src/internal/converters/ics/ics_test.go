@@ -21,9 +21,9 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
-	"github.com/alcionai/corso/src/internal/common/ptr"
-	"github.com/alcionai/corso/src/internal/converters/ics/tzdata"
-	"github.com/alcionai/corso/src/internal/tester"
+	"github.com/twyouens/corso/src/internal/common/ptr"
+	"github.com/twyouens/corso/src/internal/converters/ics/tzdata"
+	"github.com/twyouens/corso/src/internal/tester"
 )
 
 type ICSUnitSuite struct {

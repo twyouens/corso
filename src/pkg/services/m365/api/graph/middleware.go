@@ -13,10 +13,10 @@ import (
 	khttp "github.com/microsoft/kiota-http-go"
 	"golang.org/x/exp/slices"
 
-	"github.com/alcionai/corso/src/internal/common/pii"
-	"github.com/alcionai/corso/src/internal/events"
-	"github.com/alcionai/corso/src/pkg/count"
-	"github.com/alcionai/corso/src/pkg/logger"
+	"github.com/twyouens/corso/src/internal/common/pii"
+	"github.com/twyouens/corso/src/internal/events"
+	"github.com/twyouens/corso/src/pkg/count"
+	"github.com/twyouens/corso/src/pkg/logger"
 )
 
 type nexter interface {
@@ -301,7 +301,7 @@ func (mw RetryMiddleware) isRetriableRespCode(ctx context.Context, resp *http.Re
 }
 
 func (mw RetryMiddleware) isRetriableRequest(req *http.Request) bool {
-	isBodiedMethod := req.Method == "POST" || req.Method == "PUT" || req.Method == "PATCH"
+	isBodiedMethod := req.Method == http.MethodPost || req.Method == http.MethodPut || req.Method == http.MethodPatch
 	if isBodiedMethod && req.Body != nil {
 		return req.ContentLength != -1
 	}

@@ -10,9 +10,9 @@ import (
 
 	"github.com/alcionai/clues"
 
-	"github.com/alcionai/corso/src/internal/common/jwt"
-	"github.com/alcionai/corso/src/internal/common/pii"
-	"github.com/alcionai/corso/src/pkg/logger"
+	"github.com/twyouens/corso/src/internal/common/jwt"
+	"github.com/twyouens/corso/src/internal/common/pii"
+	"github.com/twyouens/corso/src/pkg/logger"
 )
 
 const (

@@ -14,43 +14,42 @@ import (
 	"github.com/stretchr/testify/suite"
 	"golang.org/x/exp/slices"
 
-	"github.com/alcionai/corso/src/internal/common/prefixmatcher"
-	"github.com/alcionai/corso/src/internal/common/ptr"
-	strTD "github.com/alcionai/corso/src/internal/common/str/testdata"
-	"github.com/alcionai/corso/src/internal/data"
-	dataMock "github.com/alcionai/corso/src/internal/data/mock"
-	evmock "github.com/alcionai/corso/src/internal/events/mock"
-	"github.com/alcionai/corso/src/internal/kopia"
-	"github.com/alcionai/corso/src/internal/m365/mock"
-	odConsts "github.com/alcionai/corso/src/internal/m365/service/onedrive/consts"
-	odMock "github.com/alcionai/corso/src/internal/m365/service/onedrive/mock"
-	odStub "github.com/alcionai/corso/src/internal/m365/service/onedrive/stub"
-	"github.com/alcionai/corso/src/internal/m365/support"
-	"github.com/alcionai/corso/src/internal/model"
-	"github.com/alcionai/corso/src/internal/operations/inject"
-	opMock "github.com/alcionai/corso/src/internal/operations/inject/mock"
-	"github.com/alcionai/corso/src/internal/streamstore"
-	ssmock "github.com/alcionai/corso/src/internal/streamstore/mock"
-	"github.com/alcionai/corso/src/internal/tester"
-	"github.com/alcionai/corso/src/internal/tester/its"
-	"github.com/alcionai/corso/src/internal/tester/tconfig"
-	"github.com/alcionai/corso/src/pkg/account"
-	"github.com/alcionai/corso/src/pkg/backup"
-	"github.com/alcionai/corso/src/pkg/backup/details"
-	deeTD "github.com/alcionai/corso/src/pkg/backup/details/testdata"
-	"github.com/alcionai/corso/src/pkg/backup/identity"
-	"github.com/alcionai/corso/src/pkg/backup/metadata"
-	"github.com/alcionai/corso/src/pkg/control"
-	"github.com/alcionai/corso/src/pkg/control/repository"
-	"github.com/alcionai/corso/src/pkg/count"
-	"github.com/alcionai/corso/src/pkg/extensions"
-	"github.com/alcionai/corso/src/pkg/fault"
-	"github.com/alcionai/corso/src/pkg/path"
-	"github.com/alcionai/corso/src/pkg/selectors"
-	selTD "github.com/alcionai/corso/src/pkg/selectors/testdata"
-	"github.com/alcionai/corso/src/pkg/services/m365/api/graph"
-	storeTD "github.com/alcionai/corso/src/pkg/storage/testdata"
-	"github.com/alcionai/corso/src/pkg/store"
+	"github.com/twyouens/corso/src/internal/common/prefixmatcher"
+	"github.com/twyouens/corso/src/internal/common/ptr"
+	strTD "github.com/twyouens/corso/src/internal/common/str/testdata"
+	"github.com/twyouens/corso/src/internal/data"
+	dataMock "github.com/twyouens/corso/src/internal/data/mock"
+	"github.com/twyouens/corso/src/internal/kopia"
+	"github.com/twyouens/corso/src/internal/m365/mock"
+	odConsts "github.com/twyouens/corso/src/internal/m365/service/onedrive/consts"
+	odMock "github.com/twyouens/corso/src/internal/m365/service/onedrive/mock"
+	odStub "github.com/twyouens/corso/src/internal/m365/service/onedrive/stub"
+	"github.com/twyouens/corso/src/internal/m365/support"
+	"github.com/twyouens/corso/src/internal/model"
+	"github.com/twyouens/corso/src/internal/operations/inject"
+	opMock "github.com/twyouens/corso/src/internal/operations/inject/mock"
+	"github.com/twyouens/corso/src/internal/streamstore"
+	ssmock "github.com/twyouens/corso/src/internal/streamstore/mock"
+	"github.com/twyouens/corso/src/internal/tester"
+	"github.com/twyouens/corso/src/internal/tester/its"
+	"github.com/twyouens/corso/src/internal/tester/tconfig"
+	"github.com/twyouens/corso/src/pkg/account"
+	"github.com/twyouens/corso/src/pkg/backup"
+	"github.com/twyouens/corso/src/pkg/backup/details"
+	deeTD "github.com/twyouens/corso/src/pkg/backup/details/testdata"
+	"github.com/twyouens/corso/src/pkg/backup/identity"
+	"github.com/twyouens/corso/src/pkg/backup/metadata"
+	"github.com/twyouens/corso/src/pkg/control"
+	"github.com/twyouens/corso/src/pkg/control/repository"
+	"github.com/twyouens/corso/src/pkg/count"
+	"github.com/twyouens/corso/src/pkg/extensions"
+	"github.com/twyouens/corso/src/pkg/fault"
+	"github.com/twyouens/corso/src/pkg/path"
+	"github.com/twyouens/corso/src/pkg/selectors"
+	selTD "github.com/twyouens/corso/src/pkg/selectors/testdata"
+	"github.com/twyouens/corso/src/pkg/services/m365/api/graph"
+	storeTD "github.com/twyouens/corso/src/pkg/storage/testdata"
+	"github.com/twyouens/corso/src/pkg/store"
 )
 
 // ---------------------------------------------------------------------------
@@ -387,7 +386,6 @@ func (suite *BackupOpUnitSuite) TestNewBackupOperation_configuredOptionsMatchInp
 
 	opts := control.Options{
 		DeltaPageSize:        42,
-		DisableMetrics:       true,
 		FailureHandling:      control.FailAfterRecovery,
 		ItemExtensionFactory: slices.Clone(ext),
 		Parallelism: control.Parallelism{
@@ -454,7 +452,6 @@ func (suite *BackupOpUnitSuite) TestNewBackupOperation_configuredOptionsMatchInp
 		acct,
 		sel,
 		sel,
-		evmock.NewBus(),
 		count.New())
 	require.NoError(t, err, clues.ToCore(err))
 
@@ -526,7 +523,6 @@ func (suite *BackupOpUnitSuite) TestBackupOperation_PersistResults() {
 				acct,
 				sel,
 				sel,
-				evmock.NewBus(),
 				count.New())
 			require.NoError(t, err, clues.ToCore(err))
 
@@ -1571,7 +1567,6 @@ func (suite *BackupOpIntegrationSuite) TestNewBackupOperation() {
 				test.acct,
 				sel,
 				sel,
-				evmock.NewBus(),
 				count.New())
 			test.errCheck(t, err, clues.ToCore(err))
 		})
@@ -2017,7 +2012,6 @@ func (suite *AssistBackupIntegrationSuite) TestBackupTypesForFailureModes() {
 				acct,
 				osel.Selector,
 				selectors.Selector{DiscreteOwner: userID},
-				evmock.NewBus(),
 				count.New())
 			require.NoError(t, err, clues.ToCore(err))
 
@@ -2334,7 +2328,6 @@ func (suite *AssistBackupIntegrationSuite) TestExtensionsIncrementals() {
 				acct,
 				osel.Selector,
 				selectors.Selector{DiscreteOwner: userID},
-				evmock.NewBus(),
 				count.New())
 			require.NoError(t, err, clues.ToCore(err))
 

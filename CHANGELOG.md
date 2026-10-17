@@ -8,6 +8,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased] (beta)
 ### Added
 - Audited the Alcion Kopia fork pinned in `src/go.mod` against its upstream base; see `docs/kopia-fork-audit.md` for the fork-only dependency inventory and the recommendation to move to current upstream Kopia.
+- Renamed the Go module path from `github.com/alcionai/corso/src` to `github.com/twyouens/corso/src` for this fork. Every import across `src/` was updated to match; no other behavior changed.
+- Bumped the module's `go` directive (and CI's Go toolchain) from 1.21 to 1.27 (pinned via a separate `toolchain go1.27.2` line), the current stable release available to this fork, and fixed the handful of new `go vet` findings (non-constant printf format strings) and a `staticcheck` finding (unused context) surfaced by the newer toolchain.
+- Migrated `src/.golangci.yml` to the golangci-lint v2 configuration schema and pinned golangci-lint to v2.15.0, since the previously pinned v1.54.2 cannot type-check code built with Go 1.27. Added a `make check` target (build, lint, unit tests) and a minimal CI workflow that runs it on pull requests and pushes to `main`.
+- Removed Corso's usage telemetry entirely: the RudderStack analytics event bus (`internal/events.Bus`), its `github.com/rudderlabs/analytics-go` dependency, the `RUDDERSTACK_CORSO_WRITE_KEY`/`RUDDERSTACK_CORSO_DATA_PLANE_URL` environment hooks, the `--no-stats` CLI flag, and the `control.Options.DisableMetrics` opt-out. The fork now makes no outbound analytics calls and carries nothing to opt out of. Retired the inherited CI workflows (nightly/longevity/sanity/load test, binary and website publishing, Teams notifications, test-tenant cleanup) that depended on Alcion's secrets, release process and test tenant; a replacement nightly test-tenant job is chunk 0.3's responsibility.
 
 ### Fixed
 - Handle the case where an email or event cannot be retrieved from Exchange due to an `ErrorCorruptData` error. Corso will skip over the item but report it in the backup summary.

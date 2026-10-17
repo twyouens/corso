@@ -10,7 +10,7 @@ import (
 	abstractions "github.com/microsoft/kiota-abstractions-go"
 	kauth "github.com/microsoft/kiota-authentication-azure-go"
 
-	"github.com/alcionai/corso/src/pkg/account"
+	"github.com/twyouens/corso/src/pkg/account"
 )
 
 func GetAuth(tenant, client, secret string) (*kauth.AzureIdentityAuthenticationProvider, error) {

@@ -12,17 +12,17 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
-	"github.com/alcionai/corso/src/internal/data"
-	"github.com/alcionai/corso/src/internal/m365/service/sharepoint/api"
-	spMock "github.com/alcionai/corso/src/internal/m365/service/sharepoint/mock"
-	"github.com/alcionai/corso/src/internal/tester"
-	"github.com/alcionai/corso/src/internal/tester/tconfig"
-	"github.com/alcionai/corso/src/pkg/account"
-	"github.com/alcionai/corso/src/pkg/control/testdata"
-	"github.com/alcionai/corso/src/pkg/count"
-	"github.com/alcionai/corso/src/pkg/fault"
-	"github.com/alcionai/corso/src/pkg/services/m365/api/graph"
-	bmodels "github.com/alcionai/corso/src/pkg/services/m365/api/graph/betasdk/models"
+	"github.com/twyouens/corso/src/internal/data"
+	"github.com/twyouens/corso/src/internal/m365/service/sharepoint/api"
+	spMock "github.com/twyouens/corso/src/internal/m365/service/sharepoint/mock"
+	"github.com/twyouens/corso/src/internal/tester"
+	"github.com/twyouens/corso/src/internal/tester/tconfig"
+	"github.com/twyouens/corso/src/pkg/account"
+	"github.com/twyouens/corso/src/pkg/control/testdata"
+	"github.com/twyouens/corso/src/pkg/count"
+	"github.com/twyouens/corso/src/pkg/fault"
+	"github.com/twyouens/corso/src/pkg/services/m365/api/graph"
+	bmodels "github.com/twyouens/corso/src/pkg/services/m365/api/graph/betasdk/models"
 )
 
 func createTestBetaService(t *testing.T, credentials account.M365Config) *api.BetaService {

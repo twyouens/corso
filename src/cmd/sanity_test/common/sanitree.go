@@ -6,7 +6,7 @@ import (
 	"github.com/alcionai/clues"
 	"golang.org/x/exp/maps"
 
-	"github.com/alcionai/corso/src/pkg/path"
+	"github.com/twyouens/corso/src/pkg/path"
 )
 
 type Sanileaf[T, L any] struct {

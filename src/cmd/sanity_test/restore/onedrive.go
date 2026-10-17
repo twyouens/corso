@@ -3,9 +3,9 @@ package restore
 import (
 	"context"
 
-	"github.com/alcionai/corso/src/cmd/sanity_test/common"
-	"github.com/alcionai/corso/src/cmd/sanity_test/driveish"
-	"github.com/alcionai/corso/src/pkg/services/m365/api"
+	"github.com/twyouens/corso/src/cmd/sanity_test/common"
+	"github.com/twyouens/corso/src/cmd/sanity_test/driveish"
+	"github.com/twyouens/corso/src/pkg/services/m365/api"
 )
 
 func CheckOneDriveRestoration(

@@ -3,9 +3,9 @@ package selectors
 import (
 	"golang.org/x/exp/maps"
 
-	"github.com/alcionai/corso/src/internal/common/idname"
-	"github.com/alcionai/corso/src/pkg/backup/identity"
-	"github.com/alcionai/corso/src/pkg/path"
+	"github.com/twyouens/corso/src/internal/common/idname"
+	"github.com/twyouens/corso/src/pkg/backup/identity"
+	"github.com/twyouens/corso/src/pkg/path"
 )
 
 func key(br identity.Reasoner) string {

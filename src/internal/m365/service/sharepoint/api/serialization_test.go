@@ -10,8 +10,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
-	spMock "github.com/alcionai/corso/src/internal/m365/service/sharepoint/mock"
-	"github.com/alcionai/corso/src/internal/tester"
+	spMock "github.com/twyouens/corso/src/internal/m365/service/sharepoint/mock"
+	"github.com/twyouens/corso/src/internal/tester"
 )
 
 type SerializationUnitSuite struct {

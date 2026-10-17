@@ -6,7 +6,7 @@ import (
 
 	"github.com/alcionai/clues"
 
-	"github.com/alcionai/corso/src/pkg/fault"
+	"github.com/twyouens/corso/src/pkg/fault"
 )
 
 // ---------------------------------------------------------------------------

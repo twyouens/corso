@@ -1,6 +1,6 @@
 package testdata
 
-import "github.com/alcionai/corso/src/pkg/selectors"
+import "github.com/twyouens/corso/src/pkg/selectors"
 
 const TestFolderName = "test"
 

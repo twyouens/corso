@@ -5,8 +5,8 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/alcionai/corso/src/pkg/credentials"
-	"github.com/alcionai/corso/src/pkg/storage"
+	"github.com/twyouens/corso/src/pkg/credentials"
+	"github.com/twyouens/corso/src/pkg/storage"
 )
 
 // S3 bucket flags

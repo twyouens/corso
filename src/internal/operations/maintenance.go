@@ -6,15 +6,13 @@ import (
 
 	"github.com/alcionai/clues"
 
-	"github.com/alcionai/corso/src/internal/common/crash"
-	"github.com/alcionai/corso/src/internal/events"
-	"github.com/alcionai/corso/src/internal/kopia"
-	"github.com/alcionai/corso/src/internal/stats"
-	"github.com/alcionai/corso/src/pkg/control"
-	"github.com/alcionai/corso/src/pkg/control/repository"
-	"github.com/alcionai/corso/src/pkg/count"
-	"github.com/alcionai/corso/src/pkg/dttm"
-	"github.com/alcionai/corso/src/pkg/store"
+	"github.com/twyouens/corso/src/internal/common/crash"
+	"github.com/twyouens/corso/src/internal/kopia"
+	"github.com/twyouens/corso/src/internal/stats"
+	"github.com/twyouens/corso/src/pkg/control"
+	"github.com/twyouens/corso/src/pkg/control/repository"
+	"github.com/twyouens/corso/src/pkg/count"
+	"github.com/twyouens/corso/src/pkg/store"
 )
 
 // MaintenanceOperation wraps an operation with restore-specific props.
@@ -36,10 +34,9 @@ func NewMaintenanceOperation(
 	kw *kopia.Wrapper,
 	storer store.BackupStorer,
 	mOpts repository.Maintenance,
-	bus events.Eventer,
 ) (MaintenanceOperation, error) {
 	op := MaintenanceOperation{
-		operation: newOperation(opts, bus, count.New(), kw, storer),
+		operation: newOperation(opts, count.New(), kw, storer),
 		mOpts:     mOpts,
 	}
 
@@ -56,19 +53,6 @@ func (op *MaintenanceOperation) Run(ctx context.Context) (err error) {
 	}()
 
 	op.Results.StartedAt = time.Now()
-
-	defer func() {
-		op.bus.Event(
-			ctx,
-			events.MaintenanceEnd,
-			map[string]any{
-				events.StartTime: op.Results.StartedAt,
-				events.Duration:  op.Results.CompletedAt.Sub(op.Results.StartedAt),
-				events.EndTime:   dttm.Format(op.Results.CompletedAt),
-				events.Status:    op.Status.String(),
-				events.Resources: op.mOpts.Type.String(),
-			})
-	}()
 
 	return op.do(ctx)
 }

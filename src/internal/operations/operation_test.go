@@ -8,12 +8,11 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
 
-	"github.com/alcionai/corso/src/internal/events"
-	"github.com/alcionai/corso/src/internal/kopia"
-	"github.com/alcionai/corso/src/internal/tester"
-	"github.com/alcionai/corso/src/pkg/control"
-	"github.com/alcionai/corso/src/pkg/count"
-	"github.com/alcionai/corso/src/pkg/store"
+	"github.com/twyouens/corso/src/internal/kopia"
+	"github.com/twyouens/corso/src/internal/tester"
+	"github.com/twyouens/corso/src/pkg/control"
+	"github.com/twyouens/corso/src/pkg/count"
+	"github.com/twyouens/corso/src/pkg/store"
 )
 
 type OperationSuite struct {
@@ -26,7 +25,7 @@ func TestOperationSuite(t *testing.T) {
 
 func (suite *OperationSuite) TestNewOperation() {
 	t := suite.T()
-	op := newOperation(control.DefaultOptions(), events.Bus{}, &count.Bus{}, nil, nil)
+	op := newOperation(control.DefaultOptions(), &count.Bus{}, nil, nil)
 	assert.Greater(t, op.CreatedAt, time.Time{})
 }
 
@@ -46,7 +45,7 @@ func (suite *OperationSuite) TestOperation_Validate() {
 	}
 	for _, test := range table {
 		suite.Run(test.name, func() {
-			err := newOperation(control.DefaultOptions(), events.Bus{}, &count.Bus{}, test.kw, test.sw).validate()
+			err := newOperation(control.DefaultOptions(), &count.Bus{}, test.kw, test.sw).validate()
 			test.errCheck(suite.T(), err, clues.ToCore(err))
 		})
 	}

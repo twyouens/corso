@@ -1,9 +1,9 @@
 package utils
 
 import (
-	"github.com/alcionai/corso/src/cli/flags"
-	"github.com/alcionai/corso/src/pkg/config"
-	"github.com/alcionai/corso/src/pkg/control"
+	"github.com/twyouens/corso/src/cli/flags"
+	"github.com/twyouens/corso/src/pkg/config"
+	"github.com/twyouens/corso/src/pkg/control"
 )
 
 // Control produces the control options based on the user's flags.
@@ -20,7 +20,6 @@ func Control() control.Options {
 	}
 
 	opt.DeltaPageSize = dps
-	opt.DisableMetrics = flags.NoStatsFV
 	opt.SkipReduce = flags.SkipReduceFV
 	opt.ToggleFeatures.DisableIncrementals = flags.DisableIncrementalsFV
 	opt.ToggleFeatures.ForceItemDataDownload = flags.ForceItemDataDownloadFV

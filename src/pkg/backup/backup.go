@@ -10,15 +10,15 @@ import (
 
 	"github.com/dustin/go-humanize"
 
-	"github.com/alcionai/corso/src/cli/print"
-	"github.com/alcionai/corso/src/internal/common/str"
-	"github.com/alcionai/corso/src/internal/model"
-	"github.com/alcionai/corso/src/internal/stats"
-	"github.com/alcionai/corso/src/internal/version"
-	"github.com/alcionai/corso/src/pkg/dttm"
-	"github.com/alcionai/corso/src/pkg/fault"
-	"github.com/alcionai/corso/src/pkg/logger"
-	"github.com/alcionai/corso/src/pkg/selectors"
+	"github.com/twyouens/corso/src/cli/print"
+	"github.com/twyouens/corso/src/internal/common/str"
+	"github.com/twyouens/corso/src/internal/model"
+	"github.com/twyouens/corso/src/internal/stats"
+	"github.com/twyouens/corso/src/internal/version"
+	"github.com/twyouens/corso/src/pkg/dttm"
+	"github.com/twyouens/corso/src/pkg/fault"
+	"github.com/twyouens/corso/src/pkg/logger"
+	"github.com/twyouens/corso/src/pkg/selectors"
 )
 
 // Backup represents the result of a backup operation
@@ -252,7 +252,7 @@ func (b Backup) Values(skipID bool) []string {
 	)
 
 	if errCount+b.TotalSkippedItems > 0 {
-		status += (" (")
+		status += " ("
 	}
 
 	if errCount > 0 {
@@ -284,7 +284,7 @@ func (b Backup) Values(skipID bool) []string {
 	status += strings.Join(skipped, ", ")
 
 	if errCount+b.TotalSkippedItems > 0 {
-		status += (")")
+		status += ")"
 	}
 
 	name := str.First(

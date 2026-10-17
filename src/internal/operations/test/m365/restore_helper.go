@@ -8,24 +8,22 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/alcionai/corso/src/internal/common/idname"
-	strTD "github.com/alcionai/corso/src/internal/common/str/testdata"
-	"github.com/alcionai/corso/src/internal/events"
-	evmock "github.com/alcionai/corso/src/internal/events/mock"
-	"github.com/alcionai/corso/src/internal/kopia"
-	"github.com/alcionai/corso/src/internal/m365"
-	"github.com/alcionai/corso/src/internal/model"
-	"github.com/alcionai/corso/src/internal/operations"
-	"github.com/alcionai/corso/src/internal/streamstore"
-	"github.com/alcionai/corso/src/internal/tester/tconfig"
-	"github.com/alcionai/corso/src/pkg/account"
-	"github.com/alcionai/corso/src/pkg/backup/details"
-	"github.com/alcionai/corso/src/pkg/control"
-	"github.com/alcionai/corso/src/pkg/control/repository"
-	"github.com/alcionai/corso/src/pkg/count"
-	"github.com/alcionai/corso/src/pkg/selectors"
-	"github.com/alcionai/corso/src/pkg/storage"
-	"github.com/alcionai/corso/src/pkg/store"
+	"github.com/twyouens/corso/src/internal/common/idname"
+	strTD "github.com/twyouens/corso/src/internal/common/str/testdata"
+	"github.com/twyouens/corso/src/internal/kopia"
+	"github.com/twyouens/corso/src/internal/m365"
+	"github.com/twyouens/corso/src/internal/model"
+	"github.com/twyouens/corso/src/internal/operations"
+	"github.com/twyouens/corso/src/internal/streamstore"
+	"github.com/twyouens/corso/src/internal/tester/tconfig"
+	"github.com/twyouens/corso/src/pkg/account"
+	"github.com/twyouens/corso/src/pkg/backup/details"
+	"github.com/twyouens/corso/src/pkg/control"
+	"github.com/twyouens/corso/src/pkg/control/repository"
+	"github.com/twyouens/corso/src/pkg/count"
+	"github.com/twyouens/corso/src/pkg/selectors"
+	"github.com/twyouens/corso/src/pkg/storage"
+	"github.com/twyouens/corso/src/pkg/store"
 )
 
 type RestoreOpDependencies struct {
@@ -68,7 +66,6 @@ func PrepNewTestRestoreOp(
 	ctx context.Context, //revive:disable-line:context-as-argument
 	backupStore storage.Storage,
 	backupID model.StableID,
-	bus events.Eventer,
 	counter *count.Bus,
 	sel selectors.Selector,
 	opts control.Options,
@@ -122,7 +119,6 @@ func PrepNewTestRestoreOp(
 		ctx,
 		rod,
 		backupID,
-		bus,
 		counter,
 		opts,
 		restoreCfg)
@@ -144,7 +140,6 @@ func NewTestRestoreOp(
 	ctx context.Context, //revive:disable-line:context-as-argument
 	rod *RestoreOpDependencies,
 	backupID model.StableID,
-	bus events.Eventer,
 	counter *count.Bus,
 	opts control.Options,
 	restoreCfg control.RestoreConfig,
@@ -164,7 +159,6 @@ func NewTestRestoreOp(
 		backupID,
 		rod.sel,
 		restoreCfg,
-		bus,
 		counter)
 	if !assert.NoError(t, err, clues.ToCore(err)) {
 		rod.Close(t, ctx)
@@ -178,7 +172,6 @@ func RunAndCheckRestore(
 	t *testing.T,
 	ctx context.Context, //revive:disable-line:context-as-argument
 	ro *operations.RestoreOperation,
-	mb *evmock.Bus,
 	acceptNoData bool,
 ) *details.Details {
 	deets, err := ro.Run(ctx)
@@ -211,7 +204,6 @@ func RunAndCheckRestore(
 	assert.NotZero(t, ro.Results.ItemsRead, "count of items read")
 	assert.NotZero(t, ro.Results.BytesRead, "bytes read")
 	assert.Equal(t, 1, ro.Results.ResourceOwners, "count of resource owners")
-	assert.Equal(t, 1, mb.TimesCalled[events.RestoreEnd], "restore-end events")
 
 	return deets
 }

@@ -9,22 +9,20 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
-	"github.com/alcionai/corso/src/internal/events"
-	evmock "github.com/alcionai/corso/src/internal/events/mock"
-	"github.com/alcionai/corso/src/internal/m365/collection/drive"
-	. "github.com/alcionai/corso/src/internal/operations/test/m365"
-	"github.com/alcionai/corso/src/internal/tester"
-	"github.com/alcionai/corso/src/internal/tester/its"
-	"github.com/alcionai/corso/src/internal/tester/tconfig"
-	"github.com/alcionai/corso/src/internal/version"
-	deeTD "github.com/alcionai/corso/src/pkg/backup/details/testdata"
-	"github.com/alcionai/corso/src/pkg/control"
-	"github.com/alcionai/corso/src/pkg/count"
-	"github.com/alcionai/corso/src/pkg/path"
-	"github.com/alcionai/corso/src/pkg/selectors"
-	selTD "github.com/alcionai/corso/src/pkg/selectors/testdata"
-	"github.com/alcionai/corso/src/pkg/services/m365/api"
-	storeTD "github.com/alcionai/corso/src/pkg/storage/testdata"
+	"github.com/twyouens/corso/src/internal/m365/collection/drive"
+	. "github.com/twyouens/corso/src/internal/operations/test/m365"
+	"github.com/twyouens/corso/src/internal/tester"
+	"github.com/twyouens/corso/src/internal/tester/its"
+	"github.com/twyouens/corso/src/internal/tester/tconfig"
+	"github.com/twyouens/corso/src/internal/version"
+	deeTD "github.com/twyouens/corso/src/pkg/backup/details/testdata"
+	"github.com/twyouens/corso/src/pkg/control"
+	"github.com/twyouens/corso/src/pkg/count"
+	"github.com/twyouens/corso/src/pkg/path"
+	"github.com/twyouens/corso/src/pkg/selectors"
+	selTD "github.com/twyouens/corso/src/pkg/selectors/testdata"
+	"github.com/twyouens/corso/src/pkg/services/m365/api"
+	storeTD "github.com/twyouens/corso/src/pkg/storage/testdata"
 )
 
 type GroupsBackupIntgSuite struct {
@@ -192,7 +190,6 @@ func (suite *GroupsBackupIntgSuite) TestBackup_Run_groupsBasic() {
 	defer flush()
 
 	var (
-		mb      = evmock.NewBus()
 		counter = count.New()
 		sel     = selectors.NewGroupsBackup([]string{suite.m365.Group.ID})
 		opts    = control.DefaultOptions()
@@ -208,13 +205,13 @@ func (suite *GroupsBackupIntgSuite) TestBackup_Run_groupsBasic() {
 	// we go fix the group mailbox.
 	// selTD.GroupsBackupConversationScope(sel))
 
-	bo, bod := PrepNewTestBackupOp(t, ctx, mb, sel.Selector, opts, version.Backup, counter)
+	bo, bod := PrepNewTestBackupOp(t, ctx, sel.Selector, opts, version.Backup, counter)
 	defer bod.Close(t, ctx)
 
 	reasons, err := bod.Sel.Reasons(bod.Acct.ID(), false)
 	require.NoError(t, err, clues.ToCore(err))
 
-	RunAndCheckBackup(t, ctx, &bo, mb, false)
+	RunAndCheckBackup(t, ctx, &bo, false)
 
 	for _, reason := range reasons {
 		CheckBackupIsInManifests(
@@ -256,16 +253,14 @@ func (suite *GroupsBackupIntgSuite) TestBackup_Run_groupsBasic() {
 	// Since graph doesn't provide us a way to programmatically delete conversations,
 	// or create new conversations without a delegated token, we can't do incremental
 	// testing with newly added items.
-	incMB := evmock.NewBus()
 	incBO := NewTestBackupOp(
 		t,
 		ctx,
 		bod,
-		incMB,
 		opts,
 		count.New())
 
-	RunAndCheckBackup(t, ctx, &incBO, incMB, true)
+	RunAndCheckBackup(t, ctx, &incBO, true)
 
 	for _, reason := range reasons {
 		CheckBackupIsInManifests(
@@ -306,7 +301,6 @@ func (suite *GroupsBackupIntgSuite) TestBackup_Run_groupsBasic() {
 	assert.Greater(t, bo.Results.ItemsWritten, incBO.Results.ItemsWritten, "incremental items written")
 	assert.Greater(t, bo.Results.BytesRead, incBO.Results.BytesRead, "incremental bytes read")
 	assert.Greater(t, bo.Results.BytesUploaded, incBO.Results.BytesUploaded, "incremental bytes uploaded")
-	assert.Equal(t, 1, incMB.TimesCalled[events.BackupEnd], "incremental backup-end events")
 }
 
 type GroupsBackupNightlyIntgSuite struct {

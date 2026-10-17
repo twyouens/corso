@@ -8,28 +8,26 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/alcionai/corso/src/internal/common/idname"
-	strTD "github.com/alcionai/corso/src/internal/common/str/testdata"
-	"github.com/alcionai/corso/src/internal/events"
-	evmock "github.com/alcionai/corso/src/internal/events/mock"
-	"github.com/alcionai/corso/src/internal/kopia"
-	"github.com/alcionai/corso/src/internal/m365"
-	"github.com/alcionai/corso/src/internal/operations"
-	"github.com/alcionai/corso/src/internal/streamstore"
-	"github.com/alcionai/corso/src/internal/tester"
-	"github.com/alcionai/corso/src/internal/tester/tconfig"
-	"github.com/alcionai/corso/src/internal/version"
-	"github.com/alcionai/corso/src/pkg/account"
-	deeTD "github.com/alcionai/corso/src/pkg/backup/details/testdata"
-	"github.com/alcionai/corso/src/pkg/backup/identity"
-	"github.com/alcionai/corso/src/pkg/control"
-	"github.com/alcionai/corso/src/pkg/control/repository"
-	"github.com/alcionai/corso/src/pkg/count"
-	"github.com/alcionai/corso/src/pkg/path"
-	"github.com/alcionai/corso/src/pkg/selectors"
-	"github.com/alcionai/corso/src/pkg/storage"
-	storeTD "github.com/alcionai/corso/src/pkg/storage/testdata"
-	"github.com/alcionai/corso/src/pkg/store"
+	"github.com/twyouens/corso/src/internal/common/idname"
+	strTD "github.com/twyouens/corso/src/internal/common/str/testdata"
+	"github.com/twyouens/corso/src/internal/kopia"
+	"github.com/twyouens/corso/src/internal/m365"
+	"github.com/twyouens/corso/src/internal/operations"
+	"github.com/twyouens/corso/src/internal/streamstore"
+	"github.com/twyouens/corso/src/internal/tester"
+	"github.com/twyouens/corso/src/internal/tester/tconfig"
+	"github.com/twyouens/corso/src/internal/version"
+	"github.com/twyouens/corso/src/pkg/account"
+	deeTD "github.com/twyouens/corso/src/pkg/backup/details/testdata"
+	"github.com/twyouens/corso/src/pkg/backup/identity"
+	"github.com/twyouens/corso/src/pkg/control"
+	"github.com/twyouens/corso/src/pkg/control/repository"
+	"github.com/twyouens/corso/src/pkg/count"
+	"github.com/twyouens/corso/src/pkg/path"
+	"github.com/twyouens/corso/src/pkg/selectors"
+	"github.com/twyouens/corso/src/pkg/storage"
+	storeTD "github.com/twyouens/corso/src/pkg/storage/testdata"
+	"github.com/twyouens/corso/src/pkg/store"
 )
 
 type BackupOpDependencies struct {
@@ -68,7 +66,6 @@ func (bod *BackupOpDependencies) Close(
 func PrepNewTestBackupOp(
 	t *testing.T,
 	ctx context.Context, //revive:disable-line:context-as-argument
-	bus events.Eventer,
 	sel selectors.Selector,
 	opts control.Options,
 	backupVersion int,
@@ -127,7 +124,6 @@ func PrepNewTestBackupOp(
 		t,
 		ctx,
 		bod,
-		bus,
 		opts,
 		counter)
 	bo.BackupVersion = backupVersion
@@ -148,7 +144,6 @@ func NewTestBackupOp(
 	t *testing.T,
 	ctx context.Context, //revive:disable-line:context-as-argument
 	bod *BackupOpDependencies,
-	bus events.Eventer,
 	opts control.Options,
 	counter *count.Bus,
 ) operations.BackupOperation {
@@ -163,7 +158,6 @@ func NewTestBackupOp(
 		bod.Acct,
 		bod.Sel,
 		bod.Sel,
-		bus,
 		counter)
 	if !assert.NoError(t, err, clues.ToCore(err)) {
 		bod.Close(t, ctx)
@@ -177,7 +171,6 @@ func RunAndCheckBackup(
 	t *testing.T,
 	ctx context.Context, //revive:disable-line:context-as-argument
 	bo *operations.BackupOperation,
-	mb *evmock.Bus,
 	acceptNoData bool,
 ) {
 	err := bo.Run(ctx)
@@ -212,7 +205,6 @@ func RunAndCheckBackup(
 	assert.Equal(t, 1, bo.Results.ResourceOwners, "count of resource owners")
 	assert.NoError(t, bo.Errors.Failure(), "incremental non-recoverable error", clues.ToCore(bo.Errors.Failure()))
 	assert.Empty(t, bo.Errors.Recovered(), "incremental recoverable/iteration errors")
-	assert.Equal(t, 1, mb.TimesCalled[events.BackupEnd], "backup-end events")
 }
 
 func CheckBackupIsInManifests(
@@ -265,7 +257,6 @@ func RunMergeBaseGroupsUpdate(
 	defer flush()
 
 	var (
-		mb      = evmock.NewBus()
 		opts    = control.DefaultOptions()
 		whatSet = deeTD.CategoryFromRepoRef
 	)
@@ -274,7 +265,6 @@ func RunMergeBaseGroupsUpdate(
 	bo, bod := PrepNewTestBackupOp(
 		t,
 		ctx,
-		mb,
 		sel,
 		opts,
 		version.All8MigrateUserPNToID,
@@ -287,7 +277,7 @@ func RunMergeBaseGroupsUpdate(
 		ctx, flush := tester.NewContext(t)
 		defer flush()
 
-		RunAndCheckBackup(t, ctx, &bo, mb, false)
+		RunAndCheckBackup(t, ctx, &bo, false)
 
 		reasons, err := bod.Sel.Reasons(bod.Acct.ID(), false)
 		require.NoError(t, err, clues.ToCore(err))
@@ -331,21 +321,17 @@ func RunMergeBaseGroupsUpdate(
 		ctx, flush := tester.NewContext(t)
 		defer flush()
 
-		var (
-			mb   = evmock.NewBus()
-			opts = control.DefaultOptions()
-		)
+		opts := control.DefaultOptions()
 
 		forcedFull := NewTestBackupOp(
 			t,
 			ctx,
 			bod,
-			mb,
 			opts,
 			count.New())
 		forcedFull.BackupVersion = version.Groups9Update
 
-		RunAndCheckBackup(t, ctx, &forcedFull, mb, false)
+		RunAndCheckBackup(t, ctx, &forcedFull, false)
 
 		reasons, err := bod.Sel.Reasons(bod.Acct.ID(), false)
 		require.NoError(t, err, clues.ToCore(err))

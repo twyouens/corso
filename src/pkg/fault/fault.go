@@ -11,8 +11,8 @@ import (
 	"golang.org/x/exp/maps"
 	"golang.org/x/exp/slices"
 
-	"github.com/alcionai/corso/src/cli/print"
-	"github.com/alcionai/corso/src/pkg/logger"
+	"github.com/twyouens/corso/src/cli/print"
+	"github.com/twyouens/corso/src/pkg/logger"
 )
 
 // temporary hack identifier

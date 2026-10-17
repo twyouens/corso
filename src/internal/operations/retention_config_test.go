@@ -8,14 +8,13 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
-	"github.com/alcionai/corso/src/internal/common/ptr"
-	strTD "github.com/alcionai/corso/src/internal/common/str/testdata"
-	evmock "github.com/alcionai/corso/src/internal/events/mock"
-	"github.com/alcionai/corso/src/internal/kopia"
-	"github.com/alcionai/corso/src/internal/tester"
-	"github.com/alcionai/corso/src/pkg/control"
-	"github.com/alcionai/corso/src/pkg/control/repository"
-	storeTD "github.com/alcionai/corso/src/pkg/storage/testdata"
+	"github.com/twyouens/corso/src/internal/common/ptr"
+	strTD "github.com/twyouens/corso/src/internal/common/str/testdata"
+	"github.com/twyouens/corso/src/internal/kopia"
+	"github.com/twyouens/corso/src/internal/tester"
+	"github.com/twyouens/corso/src/pkg/control"
+	"github.com/twyouens/corso/src/pkg/control/repository"
+	storeTD "github.com/twyouens/corso/src/pkg/storage/testdata"
 )
 
 type RetentionConfigOpIntegrationSuite struct {
@@ -63,8 +62,7 @@ func (suite *RetentionConfigOpIntegrationSuite) TestRepoRetentionConfig() {
 		kw,
 		repository.Retention{
 			Extend: ptr.To(true),
-		},
-		evmock.NewBus())
+		})
 	require.NoError(t, err, clues.ToCore(err))
 
 	err = rco.Run(ctx)

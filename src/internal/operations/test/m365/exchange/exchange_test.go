@@ -13,31 +13,29 @@ import (
 	"github.com/stretchr/testify/suite"
 	"golang.org/x/exp/maps"
 
-	inMock "github.com/alcionai/corso/src/internal/common/idname/mock"
-	"github.com/alcionai/corso/src/internal/common/ptr"
-	"github.com/alcionai/corso/src/internal/events"
-	evmock "github.com/alcionai/corso/src/internal/events/mock"
-	exchMock "github.com/alcionai/corso/src/internal/m365/service/exchange/mock"
-	exchTD "github.com/alcionai/corso/src/internal/m365/service/exchange/testdata"
-	. "github.com/alcionai/corso/src/internal/operations/test/m365"
-	"github.com/alcionai/corso/src/internal/tester"
-	"github.com/alcionai/corso/src/internal/tester/its"
-	"github.com/alcionai/corso/src/internal/tester/tconfig"
-	"github.com/alcionai/corso/src/internal/version"
-	"github.com/alcionai/corso/src/pkg/backup/details"
-	deeTD "github.com/alcionai/corso/src/pkg/backup/details/testdata"
-	"github.com/alcionai/corso/src/pkg/backup/metadata"
-	"github.com/alcionai/corso/src/pkg/control"
-	ctrlTD "github.com/alcionai/corso/src/pkg/control/testdata"
-	"github.com/alcionai/corso/src/pkg/count"
-	"github.com/alcionai/corso/src/pkg/dttm"
-	"github.com/alcionai/corso/src/pkg/fault"
-	"github.com/alcionai/corso/src/pkg/path"
-	"github.com/alcionai/corso/src/pkg/selectors"
-	"github.com/alcionai/corso/src/pkg/services/m365/api"
-	"github.com/alcionai/corso/src/pkg/services/m365/api/graph"
-	"github.com/alcionai/corso/src/pkg/services/m365/api/pagers"
-	storeTD "github.com/alcionai/corso/src/pkg/storage/testdata"
+	inMock "github.com/twyouens/corso/src/internal/common/idname/mock"
+	"github.com/twyouens/corso/src/internal/common/ptr"
+	exchMock "github.com/twyouens/corso/src/internal/m365/service/exchange/mock"
+	exchTD "github.com/twyouens/corso/src/internal/m365/service/exchange/testdata"
+	. "github.com/twyouens/corso/src/internal/operations/test/m365"
+	"github.com/twyouens/corso/src/internal/tester"
+	"github.com/twyouens/corso/src/internal/tester/its"
+	"github.com/twyouens/corso/src/internal/tester/tconfig"
+	"github.com/twyouens/corso/src/internal/version"
+	"github.com/twyouens/corso/src/pkg/backup/details"
+	deeTD "github.com/twyouens/corso/src/pkg/backup/details/testdata"
+	"github.com/twyouens/corso/src/pkg/backup/metadata"
+	"github.com/twyouens/corso/src/pkg/control"
+	ctrlTD "github.com/twyouens/corso/src/pkg/control/testdata"
+	"github.com/twyouens/corso/src/pkg/count"
+	"github.com/twyouens/corso/src/pkg/dttm"
+	"github.com/twyouens/corso/src/pkg/fault"
+	"github.com/twyouens/corso/src/pkg/path"
+	"github.com/twyouens/corso/src/pkg/selectors"
+	"github.com/twyouens/corso/src/pkg/services/m365/api"
+	"github.com/twyouens/corso/src/pkg/services/m365/api/graph"
+	"github.com/twyouens/corso/src/pkg/services/m365/api/pagers"
+	storeTD "github.com/twyouens/corso/src/pkg/storage/testdata"
 )
 
 type ExchangeBackupIntgSuite struct {
@@ -119,14 +117,13 @@ func (suite *ExchangeBackupIntgSuite) TestBackup_Run_exchange() {
 			defer flush()
 
 			var (
-				mb      = evmock.NewBus()
 				counter = count.New()
 				sel     = test.selector().Selector
 				opts    = control.DefaultOptions()
 				whatSet = deeTD.CategoryFromRepoRef
 			)
 
-			bo, bod := PrepNewTestBackupOp(t, ctx, mb, sel, opts, version.Backup, counter)
+			bo, bod := PrepNewTestBackupOp(t, ctx, sel, opts, version.Backup, counter)
 			defer bod.Close(t, ctx)
 
 			sel = bod.Sel
@@ -137,7 +134,7 @@ func (suite *ExchangeBackupIntgSuite) TestBackup_Run_exchange() {
 			require.NoError(t, err, clues.ToCore(err))
 
 			// run the tests
-			RunAndCheckBackup(t, ctx, &bo, mb, false)
+			RunAndCheckBackup(t, ctx, &bo, false)
 			CheckBackupIsInManifests(
 				t,
 				ctx,
@@ -181,18 +178,15 @@ func (suite *ExchangeBackupIntgSuite) TestBackup_Run_exchange() {
 			// Basic, happy path incremental test.  No changes are dictated or expected.
 			// This only tests that an incremental backup is runnable at all, and that it
 			// produces fewer results than the last backup.
-			var (
-				incMB = evmock.NewBus()
-				incBO = NewTestBackupOp(
-					t,
-					ctx,
-					bod,
-					incMB,
-					opts,
-					counter)
-			)
 
-			RunAndCheckBackup(t, ctx, &incBO, incMB, true)
+			incBO := NewTestBackupOp(
+				t,
+				ctx,
+				bod,
+				opts,
+				counter)
+
+			RunAndCheckBackup(t, ctx, &incBO, true)
 			CheckBackupIsInManifests(
 				t,
 				ctx,
@@ -230,7 +224,6 @@ func (suite *ExchangeBackupIntgSuite) TestBackup_Run_exchange() {
 			assert.Equal(t, bo.Results.ResourceOwners, incBO.Results.ResourceOwners, "incremental backup resource owner")
 			assert.NoError(t, incBO.Errors.Failure(), "incremental non-recoverable error", clues.ToCore(bo.Errors.Failure()))
 			assert.Empty(t, incBO.Errors.Recovered(), "count incremental recoverable/iteration errors")
-			assert.Equal(t, 1, incMB.TimesCalled[events.BackupEnd], "incremental backup-end events")
 		})
 	}
 }
@@ -253,7 +246,6 @@ func testExchangeContinuousBackups(suite *ExchangeBackupIntgSuite, toggles contr
 
 	var (
 		acct       = tconfig.NewM365Account(t)
-		mb         = evmock.NewBus()
 		counter    = count.New()
 		now        = dttm.Now()
 		service    = path.ExchangeService
@@ -478,11 +470,11 @@ func testExchangeContinuousBackups(suite *ExchangeBackupIntgSuite, toggles contr
 		}
 	}
 
-	bo, bod := PrepNewTestBackupOp(t, ctx, mb, sel.Selector, opts, version.Backup, counter)
+	bo, bod := PrepNewTestBackupOp(t, ctx, sel.Selector, opts, version.Backup, counter)
 	defer bod.Close(t, ctx)
 
 	// run the initial backup
-	RunAndCheckBackup(t, ctx, &bo, mb, false)
+	RunAndCheckBackup(t, ctx, &bo, false)
 
 	// precheck to ensure the expectedDeets are correct.
 	// if we fail here, the expectedDeets were populated incorrectly.
@@ -812,7 +804,6 @@ func testExchangeContinuousBackups(suite *ExchangeBackupIntgSuite, toggles contr
 		suite.Run(test.name, func() {
 			var (
 				t       = suite.T()
-				incMB   = evmock.NewBus()
 				counter = count.New()
 				atid    = creds.AzureTenantID
 			)
@@ -820,7 +811,7 @@ func testExchangeContinuousBackups(suite *ExchangeBackupIntgSuite, toggles contr
 			ctx, flush := tester.WithContext(t, ctx)
 			defer flush()
 
-			incBO := NewTestBackupOp(t, ctx, bod, incMB, opts, counter)
+			incBO := NewTestBackupOp(t, ctx, bod, opts, counter)
 
 			suite.Run("PreTestSetup", func() {
 				t := suite.T()
@@ -883,7 +874,6 @@ func testExchangeContinuousBackups(suite *ExchangeBackupIntgSuite, toggles contr
 			// assert.Equal(t, test.nonMetaItemsWritten, incBO.Results.ItemsWritten, "non meta incremental items write")
 			assert.NoError(t, incBO.Errors.Failure(), "incremental non-recoverable error", clues.ToCore(incBO.Errors.Failure()))
 			assert.Empty(t, incBO.Errors.Recovered(), "incremental recoverable/iteration errors")
-			assert.Equal(t, 1, incMB.TimesCalled[events.BackupEnd], "incremental backup-end events")
 		})
 	}
 }
@@ -971,15 +961,14 @@ func (suite *ExchangeRestoreNightlyIntgSuite) TestRestore_Run_exchangeWithAdvanc
 	baseSel.DiscreteOwner = suite.m365.User.ID
 
 	var (
-		mb      = evmock.NewBus()
 		counter = count.New()
 		opts    = control.DefaultOptions()
 	)
 
-	bo, bod := PrepNewTestBackupOp(t, ctx, mb, baseSel.Selector, opts, version.Backup, counter)
+	bo, bod := PrepNewTestBackupOp(t, ctx, baseSel.Selector, opts, version.Backup, counter)
 	defer bod.Close(t, ctx)
 
-	RunAndCheckBackup(t, ctx, &bo, mb, false)
+	RunAndCheckBackup(t, ctx, &bo, false)
 
 	rsel, err := baseSel.ToExchangeRestore()
 	require.NoError(t, err, clues.ToCore(err))
@@ -1017,7 +1006,6 @@ func (suite *ExchangeRestoreNightlyIntgSuite) TestRestore_Run_exchangeWithAdvanc
 		ctx, flush := tester.NewContext(t)
 		defer flush()
 
-		mb := evmock.NewBus()
 		ctr1 := count.New()
 
 		restoreCfg.OnCollision = control.Copy
@@ -1027,13 +1015,12 @@ func (suite *ExchangeRestoreNightlyIntgSuite) TestRestore_Run_exchangeWithAdvanc
 			ctx,
 			bod.St,
 			bo.Results.BackupID,
-			mb,
 			ctr1,
 			sel,
 			opts,
 			restoreCfg)
 
-		RunAndCheckRestore(t, ctx, &ro, mb, false)
+		RunAndCheckRestore(t, ctx, &ro, false)
 
 		// get all files in folder, use these as the base
 		// set of files to compare against.
@@ -1076,7 +1063,6 @@ func (suite *ExchangeRestoreNightlyIntgSuite) TestRestore_Run_exchangeWithAdvanc
 		ctx, flush := tester.NewContext(t)
 		defer flush()
 
-		mb := evmock.NewBus()
 		ctr2 := count.New()
 
 		restoreCfg.OnCollision = control.Skip
@@ -1086,13 +1072,12 @@ func (suite *ExchangeRestoreNightlyIntgSuite) TestRestore_Run_exchangeWithAdvanc
 			ctx,
 			bod.St,
 			bo.Results.BackupID,
-			mb,
 			ctr2,
 			sel,
 			opts,
 			restoreCfg)
 
-		deets := RunAndCheckRestore(t, ctx, &ro, mb, false)
+		deets := RunAndCheckRestore(t, ctx, &ro, false)
 
 		assert.Zero(
 			t,
@@ -1137,7 +1122,6 @@ func (suite *ExchangeRestoreNightlyIntgSuite) TestRestore_Run_exchangeWithAdvanc
 		ctx, flush := tester.NewContext(t)
 		defer flush()
 
-		mb := evmock.NewBus()
 		ctr3 := count.New()
 
 		restoreCfg.OnCollision = control.Replace
@@ -1147,13 +1131,12 @@ func (suite *ExchangeRestoreNightlyIntgSuite) TestRestore_Run_exchangeWithAdvanc
 			ctx,
 			bod.St,
 			bo.Results.BackupID,
-			mb,
 			ctr3,
 			sel,
 			opts,
 			restoreCfg)
 
-		deets := RunAndCheckRestore(t, ctx, &ro, mb, false)
+		deets := RunAndCheckRestore(t, ctx, &ro, false)
 		filtEnts := []details.Entry{}
 
 		for _, e := range deets.Entries {
@@ -1207,7 +1190,6 @@ func (suite *ExchangeRestoreNightlyIntgSuite) TestRestore_Run_exchangeWithAdvanc
 		ctx, flush := tester.NewContext(t)
 		defer flush()
 
-		mb := evmock.NewBus()
 		ctr4 := count.New()
 
 		restoreCfg.OnCollision = control.Copy
@@ -1217,13 +1199,12 @@ func (suite *ExchangeRestoreNightlyIntgSuite) TestRestore_Run_exchangeWithAdvanc
 			ctx,
 			bod.St,
 			bo.Results.BackupID,
-			mb,
 			ctr4,
 			sel,
 			opts,
 			restoreCfg)
 
-		deets := RunAndCheckRestore(t, ctx, &ro, mb, false)
+		deets := RunAndCheckRestore(t, ctx, &ro, false)
 		filtEnts := []details.Entry{}
 
 		for _, e := range deets.Entries {
@@ -1288,15 +1269,14 @@ func (suite *ExchangeRestoreNightlyIntgSuite) TestRestore_Run_exchangeAlternateP
 	baseSel.DiscreteOwner = suite.m365.User.ID
 
 	var (
-		mb      = evmock.NewBus()
 		counter = count.New()
 		opts    = control.DefaultOptions()
 	)
 
-	bo, bod := PrepNewTestBackupOp(t, ctx, mb, baseSel.Selector, opts, version.Backup, counter)
+	bo, bod := PrepNewTestBackupOp(t, ctx, baseSel.Selector, opts, version.Backup, counter)
 	defer bod.Close(t, ctx)
 
-	RunAndCheckBackup(t, ctx, &bo, mb, false)
+	RunAndCheckBackup(t, ctx, &bo, false)
 
 	rsel, err := baseSel.ToExchangeRestore()
 	require.NoError(t, err, clues.ToCore(err))
@@ -1314,7 +1294,6 @@ func (suite *ExchangeRestoreNightlyIntgSuite) TestRestore_Run_exchangeAlternateP
 	)
 
 	restoreCfg.OnCollision = control.Copy
-	mb = evmock.NewBus()
 
 	// first restore to the current user
 
@@ -1323,13 +1302,12 @@ func (suite *ExchangeRestoreNightlyIntgSuite) TestRestore_Run_exchangeAlternateP
 		ctx,
 		bod.St,
 		bo.Results.BackupID,
-		mb,
 		firstCtr,
 		sel,
 		opts,
 		restoreCfg)
 
-	RunAndCheckRestore(t, ctx, &ro1, mb, false)
+	RunAndCheckRestore(t, ctx, &ro1, false)
 
 	// get all files in folder, use these as the base
 	// set of files to compare against.
@@ -1373,7 +1351,6 @@ func (suite *ExchangeRestoreNightlyIntgSuite) TestRestore_Run_exchangeAlternateP
 	// then restore to the secondary user
 
 	uid = secondaryUserID
-	mb = evmock.NewBus()
 	secondCtr := count.New()
 	restoreCfg.ProtectedResource = uid
 
@@ -1382,13 +1359,12 @@ func (suite *ExchangeRestoreNightlyIntgSuite) TestRestore_Run_exchangeAlternateP
 		ctx,
 		bod.St,
 		bo.Results.BackupID,
-		mb,
 		secondCtr,
 		sel,
 		opts,
 		restoreCfg)
 
-	RunAndCheckRestore(t, ctx, &ro2, mb, false)
+	RunAndCheckRestore(t, ctx, &ro2, false)
 
 	var (
 		secondaryItemIDs       = map[path.CategoryType]map[string]struct{}{}

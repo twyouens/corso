@@ -12,12 +12,12 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
 
-	"github.com/alcionai/corso/src/internal/common/ptr"
-	"github.com/alcionai/corso/src/internal/tester"
-	"github.com/alcionai/corso/src/pkg/errs/core"
-	"github.com/alcionai/corso/src/pkg/fault"
-	graphTD "github.com/alcionai/corso/src/pkg/services/m365/api/graph/testdata"
-	"github.com/alcionai/corso/src/pkg/services/m365/custom"
+	"github.com/twyouens/corso/src/internal/common/ptr"
+	"github.com/twyouens/corso/src/internal/tester"
+	"github.com/twyouens/corso/src/pkg/errs/core"
+	"github.com/twyouens/corso/src/pkg/fault"
+	graphTD "github.com/twyouens/corso/src/pkg/services/m365/api/graph/testdata"
+	"github.com/twyouens/corso/src/pkg/services/m365/custom"
 )
 
 type GraphErrorsUnitSuite struct {

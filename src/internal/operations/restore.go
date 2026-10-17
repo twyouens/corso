@@ -7,32 +7,30 @@ import (
 	"time"
 
 	"github.com/alcionai/clues"
-	"github.com/google/uuid"
 
-	"github.com/alcionai/corso/src/internal/common/crash"
-	"github.com/alcionai/corso/src/internal/common/idname"
-	"github.com/alcionai/corso/src/internal/data"
-	"github.com/alcionai/corso/src/internal/diagnostics"
-	"github.com/alcionai/corso/src/internal/events"
-	"github.com/alcionai/corso/src/internal/kopia"
-	"github.com/alcionai/corso/src/internal/m365/service/onedrive"
-	"github.com/alcionai/corso/src/internal/model"
-	"github.com/alcionai/corso/src/internal/observe"
-	"github.com/alcionai/corso/src/internal/operations/inject"
-	"github.com/alcionai/corso/src/internal/operations/pathtransformer"
-	"github.com/alcionai/corso/src/internal/stats"
-	"github.com/alcionai/corso/src/internal/streamstore"
-	"github.com/alcionai/corso/src/pkg/account"
-	"github.com/alcionai/corso/src/pkg/backup/details"
-	"github.com/alcionai/corso/src/pkg/control"
-	"github.com/alcionai/corso/src/pkg/count"
-	"github.com/alcionai/corso/src/pkg/dttm"
-	"github.com/alcionai/corso/src/pkg/errs/core"
-	"github.com/alcionai/corso/src/pkg/fault"
-	"github.com/alcionai/corso/src/pkg/logger"
-	"github.com/alcionai/corso/src/pkg/path"
-	"github.com/alcionai/corso/src/pkg/selectors"
-	"github.com/alcionai/corso/src/pkg/store"
+	"github.com/twyouens/corso/src/internal/common/crash"
+	"github.com/twyouens/corso/src/internal/common/idname"
+	"github.com/twyouens/corso/src/internal/data"
+	"github.com/twyouens/corso/src/internal/diagnostics"
+	"github.com/twyouens/corso/src/internal/events"
+	"github.com/twyouens/corso/src/internal/kopia"
+	"github.com/twyouens/corso/src/internal/m365/service/onedrive"
+	"github.com/twyouens/corso/src/internal/model"
+	"github.com/twyouens/corso/src/internal/observe"
+	"github.com/twyouens/corso/src/internal/operations/inject"
+	"github.com/twyouens/corso/src/internal/operations/pathtransformer"
+	"github.com/twyouens/corso/src/internal/stats"
+	"github.com/twyouens/corso/src/internal/streamstore"
+	"github.com/twyouens/corso/src/pkg/account"
+	"github.com/twyouens/corso/src/pkg/backup/details"
+	"github.com/twyouens/corso/src/pkg/control"
+	"github.com/twyouens/corso/src/pkg/count"
+	"github.com/twyouens/corso/src/pkg/errs/core"
+	"github.com/twyouens/corso/src/pkg/fault"
+	"github.com/twyouens/corso/src/pkg/logger"
+	"github.com/twyouens/corso/src/pkg/path"
+	"github.com/twyouens/corso/src/pkg/selectors"
+	"github.com/twyouens/corso/src/pkg/store"
 )
 
 // RestoreOperation wraps an operation with restore-specific props.
@@ -66,11 +64,10 @@ func NewRestoreOperation(
 	backupID model.StableID,
 	sel selectors.Selector,
 	restoreCfg control.RestoreConfig,
-	bus events.Eventer,
 	ctr *count.Bus,
 ) (RestoreOperation, error) {
 	op := RestoreOperation{
-		operation:  newOperation(opts, bus, ctr, kw, sw),
+		operation:  newOperation(opts, ctr, kw, sw),
 		acct:       acct,
 		BackupID:   backupID,
 		RestoreCfg: control.EnsureRestoreConfigDefaults(ctx, restoreCfg),
@@ -102,9 +99,6 @@ type restoreStats struct {
 	ctrl          *data.CollectionStats
 	bytesRead     *stats.ByteCounter
 	resourceCount int
-
-	// a transient value only used to pair up start-end events.
-	restoreID string
 }
 
 // Run begins a synchronous restore operation.
@@ -118,7 +112,6 @@ func (op *RestoreOperation) Run(ctx context.Context) (restoreDetails *details.De
 	var (
 		opStats = restoreStats{
 			bytesRead: &stats.ByteCounter{},
-			restoreID: uuid.NewString(),
 		}
 		start  = time.Now()
 		sstore = streamstore.NewStreamer(op.kopia, op.acct.ID(), op.Selectors.PathService())
@@ -152,25 +145,6 @@ func (op *RestoreOperation) Run(ctx context.Context) (restoreDetails *details.De
 		"service", op.Selectors.Service,
 		"categories", cats,
 		"destination_container", clues.Hide(op.RestoreCfg.Location))
-
-	defer func() {
-		op.bus.Event(
-			ctx,
-			events.RestoreEnd,
-			map[string]any{
-				events.BackupID:      op.BackupID,
-				events.DataRetrieved: op.Results.BytesRead,
-				events.Duration:      op.Results.CompletedAt.Sub(op.Results.StartedAt),
-				events.EndTime:       dttm.Format(op.Results.CompletedAt),
-				events.ItemsRead:     op.Results.ItemsRead,
-				events.ItemsWritten:  op.Results.ItemsWritten,
-				events.Resources:     op.Results.ResourceOwners,
-				events.RestoreID:     opStats.restoreID,
-				events.Service:       op.Selectors.Service.String(),
-				events.StartTime:     dttm.Format(op.Results.StartedAt),
-				events.Status:        op.Status.String(),
-			})
-	}()
 
 	// -----
 	// Execution
