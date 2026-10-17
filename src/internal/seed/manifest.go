@@ -13,7 +13,23 @@ import (
 // ManifestSchemaVersion is bumped whenever the shape of Manifest or
 // ManifestItem changes incompatibly. Consumers (0.7's library API tests,
 // 3.5's k3ep tests) should check it before relying on new fields.
-const ManifestSchemaVersion = 1
+//
+// Version history:
+//   - 1: initial schema (chunk 0.3, first round). CreatedAt/ModifiedAt
+//     existed as plain time.Time but were not actually populated by five
+//     of six workloads, and disagreed between a found and a created item
+//     for the sixth - see version 2.
+//   - 2: CreatedAt/ModifiedAt changed from time.Time to *time.Time, and
+//     are now genuinely populated, from the same real Graph
+//     createdDateTime/lastModifiedDateTime, identically whether the item
+//     was found already existing or just created. A consumer checking for
+//     schema version 1 and reading these two fields as non-pointer
+//     time.Time will fail to compile/unmarshal against a version-2
+//     manifest; a consumer written against version 2 must treat a
+//     missing/null CreatedAt or ModifiedAt as "Graph has no date for this
+//     item's kind" (see the field's own doc comment for exactly which
+//     three container kinds that applies to), not as an error.
+const ManifestSchemaVersion = 2
 
 // Workload names the v1 workload a manifest item belongs to. These strings
 // are the contract later chunks assert against; don't rename a value once

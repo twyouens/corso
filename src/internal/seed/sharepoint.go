@@ -118,18 +118,17 @@ func seedDocumentLibrary(ctx context.Context, c api.Client, siteID string) ([]Ma
 	existingByName := driveItemsByName(existingChildren)
 
 	items := []ManifestItem{
-		{
-			// The library is implemented on the same Drives client as
-			// OneDrive (a document library is just another drive), but it
-			// is its own workload for manifest purposes.
-			Workload:   WorkloadSharePointLibrary,
-			Kind:       "library",
-			ID:         driveID,
-			Name:       libraryName,
-			CreatedAt:  drive.GetCreatedDateTime(),
-			ModifiedAt: drive.GetLastModifiedDateTime(),
-			ResourceID: siteID,
-		},
+		// The library is implemented on the same Drives client as
+		// OneDrive (a document library is just another drive), but it is
+		// its own workload for manifest purposes.
+		datedManifestItem(
+			drive,
+			WorkloadSharePointLibrary,
+			"library",
+			libraryName,
+			"",
+			0,
+			siteID),
 	}
 
 	for _, want := range libraryFiles {
@@ -167,7 +166,18 @@ func seedDocumentLibrary(ctx context.Context, c api.Client, siteID string) ([]Ma
 					return nil, clues.Wrap(err, fmt.Sprintf("uploading content for seed document %q", want.name))
 				}
 
-				return created, nil
+				// Re-fetch rather than return created directly, for the
+				// same reason onedrive.go's equivalent file creation
+				// does: Graph bumps lastModifiedDateTime on the content
+				// upload just above, so the pre-upload POST response's
+				// ModifiedAt would go stale the moment a later run finds
+				// this same file instead of creating it.
+				refetched, err := drives.GetItem(ctx, driveID, id)
+				if err != nil {
+					return nil, clues.Wrap(err, fmt.Sprintf("re-fetching seed document %q after upload", want.name))
+				}
+
+				return refetched, nil
 			})
 		if err != nil {
 			return nil, summary, err
@@ -175,17 +185,14 @@ func seedDocumentLibrary(ctx context.Context, c api.Client, siteID string) ([]Ma
 
 		summary.record(fileCreated)
 
-		items = append(items, ManifestItem{
-			Workload:   WorkloadSharePointLibrary,
-			Kind:       "file",
-			ID:         ptr.Val(file.GetId()),
-			Name:       want.name,
-			FolderPath: libraryName,
-			SizeBytes:  int64(len(want.content)),
-			CreatedAt:  file.GetCreatedDateTime(),
-			ModifiedAt: file.GetLastModifiedDateTime(),
-			ResourceID: siteID,
-		})
+		items = append(items, datedManifestItem(
+			file,
+			WorkloadSharePointLibrary,
+			"file",
+			want.name,
+			libraryName,
+			int64(len(want.content)),
+			siteID))
 	}
 
 	return items, summary, nil
@@ -239,15 +246,14 @@ func seedList(ctx context.Context, c api.Client, siteID string) ([]ManifestItem,
 	}
 
 	items := []ManifestItem{
-		{
-			Workload:   WorkloadSharePointList,
-			Kind:       "list",
-			ID:         listID,
-			Name:       listName,
-			CreatedAt:  list.GetCreatedDateTime(),
-			ModifiedAt: list.GetLastModifiedDateTime(),
-			ResourceID: siteID,
-		},
+		datedManifestItem(
+			list,
+			WorkloadSharePointList,
+			"list",
+			listName,
+			"",
+			0,
+			siteID),
 	}
 
 	for _, title := range listItemTitles {
@@ -292,16 +298,14 @@ func seedList(ctx context.Context, c api.Client, siteID string) ([]ManifestItem,
 
 		summary.record(liCreated)
 
-		items = append(items, ManifestItem{
-			Workload:   WorkloadSharePointList,
-			Kind:       "list_item",
-			ID:         ptr.Val(li.GetId()),
-			Name:       title,
-			FolderPath: listName,
-			CreatedAt:  li.GetCreatedDateTime(),
-			ModifiedAt: li.GetLastModifiedDateTime(),
-			ResourceID: siteID,
-		})
+		items = append(items, datedManifestItem(
+			li,
+			WorkloadSharePointList,
+			"list_item",
+			title,
+			listName,
+			0,
+			siteID))
 	}
 
 	return items, summary, nil

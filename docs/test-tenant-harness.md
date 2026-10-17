@@ -127,7 +127,7 @@ afterwards. Schema (`src/internal/seed/manifest.go`):
 
 ```json
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "generated_at": "2026-01-01T04:00:00Z",
   "tenant_id": "...",
   "prefix": "k3ep-seed",
@@ -164,18 +164,49 @@ item (so a OneDrive file's `resource_id` is a drive ID, not `SEED_USER_ID`
 itself).
 
 `created_at`/`modified_at` are Graph's own `createdDateTime`/
-`lastModifiedDateTime`, read off the same Graph object whether the item
-was found already existing or just created - a live run proved that two
-runs of the same item must report the same date, since it's the whole
-point of the field, and `smoke_test.go` asserts this directly. Three
-container kinds carry no date at all, because Graph itself returns none
-for them: the mail folder (`workload: "exchange-mail"`,
-`kind: "folder"`), the calendar (`workload: "exchange-calendar"`,
-`kind: "calendar"`) and the contacts folder (`workload:
-"exchange-contacts"`, `kind: "folder"`). Every other item - messages,
-events, contacts, the OneDrive folder and its files, the SharePoint
-library and its files, the SharePoint list and its items - does carry
-one.
+`lastModifiedDateTime` (`*time.Time` in Go, omitted from the JSON
+entirely when nil - see the schema version note below for why they are
+pointers, not plain timestamps), read off the same Graph object whether
+the item was found already existing or just created, through the single
+`datedManifestItem` function every workload's `seed*()` goes through.
+Three container kinds carry no date at all, because Graph itself returns
+none for them: the mail folder (`workload: "exchange-mail"`, `kind:
+"folder"`), the calendar (`workload: "exchange-calendar"`, `kind:
+"calendar"`) and the contacts folder (`workload: "exchange-contacts"`,
+`kind: "folder"`). Every other item - messages, events, contacts, the
+OneDrive folder and its files, the SharePoint library and its files, the
+SharePoint list and its items - does carry one.
+
+This is proven two ways, not one, because a live tenant can only prove it
+once: `dated_item_test.go` mocks the Graph object boundary directly (no
+HTTP, no tenant) and asserts, for every one of the seven Graph types this
+package reads dates from, that two independently-constructed objects with
+the same dates - standing in for "what find() returned" and "what
+create() returned" for what would be the same physical item - produce an
+identical `ManifestItem`. That is a standing regression guard: the harness
+is correctly forbidden from ever deleting its own seed items, so once an
+item exists in the tenant, every future live run finds it on both
+`FindOrCreate` calls and never exercises the create branch for it again -
+a live proof of this property can only ever happen once per item, the
+first time it's created, and cannot catch a future regression by itself.
+`smoke_test.go`'s one-time live observation (one new, permanent OneDrive
+file added specifically to force a genuine create-then-found transition)
+is the complementary proof that the real Graph API actually behaves the
+way the mocked test assumes it does.
+
+### Schema versions
+
+- **1** (chunk 0.3, first round): `CreatedAt`/`ModifiedAt` existed as
+  plain (non-pointer) `time.Time`, but five of six workloads never
+  populated them, and the sixth (calendar) only set one on the created
+  branch - a found item and a created item disagreed. Not a usable
+  contract; nothing should have depended on it, and nothing did.
+- **2** (current): `CreatedAt`/`ModifiedAt` are `*time.Time` and
+  genuinely populated as described above. A consumer written against
+  version 1's non-pointer field will not compile/unmarshal against a
+  version-2 manifest. A consumer written against version 2 must treat a
+  missing/null date as "this item's kind has no date in Graph" (the three
+  container kinds above), not as an error.
 
 Items are always sorted the same way (by workload, then folder path, then
 name, then ID) before being written, so two manifests from two runs that

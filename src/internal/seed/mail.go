@@ -111,17 +111,14 @@ func seedMail(ctx context.Context, c api.Client, userID string) ([]ManifestItem,
 
 		summary.record(msgCreated)
 
-		items = append(items, ManifestItem{
-			Workload:   WorkloadExchangeMail,
-			Kind:       "message",
-			ID:         ptr.Val(msg.GetId()),
-			Name:       want.subject,
-			FolderPath: mailFolderName,
-			SizeBytes:  int64(len(want.body)),
-			CreatedAt:  msg.GetCreatedDateTime(),
-			ModifiedAt: msg.GetLastModifiedDateTime(),
-			ResourceID: userID,
-		})
+		items = append(items, datedManifestItem(
+			msg,
+			WorkloadExchangeMail,
+			"message",
+			want.subject,
+			mailFolderName,
+			int64(len(want.body)),
+			userID))
 	}
 
 	return items, summary, nil

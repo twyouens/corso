@@ -106,15 +106,14 @@ func seedOneDrive(ctx context.Context, c api.Client, userID string) ([]ManifestI
 	existingByName := driveItemsByName(existingChildren)
 
 	items := []ManifestItem{
-		{
-			Workload:   WorkloadOneDrive,
-			Kind:       "folder",
-			ID:         folderID,
-			Name:       oneDriveFolderName,
-			CreatedAt:  folder.GetCreatedDateTime(),
-			ModifiedAt: folder.GetLastModifiedDateTime(),
-			ResourceID: driveID,
-		},
+		datedManifestItem(
+			folder,
+			WorkloadOneDrive,
+			"folder",
+			oneDriveFolderName,
+			"",
+			0,
+			driveID),
 	}
 
 	for _, want := range oneDriveFiles {
@@ -155,14 +154,21 @@ func seedOneDrive(ctx context.Context, c api.Client, userID string) ([]ManifestI
 					return nil, clues.Wrap(err, fmt.Sprintf("uploading content for seed OneDrive file %q", want.name))
 				}
 
-				// created's CreatedDateTime/LastModifiedDateTime are from
-				// the metadata-only POST, immediately before the content
-				// upload above; that's a real Graph timestamp, just not
-				// necessarily updated for the content PUT a moment later.
-				// Good enough for the manifest's purpose (a stable date,
-				// consistent whichever branch produced the item) without
-				// an extra round-trip to re-fetch.
-				return created, nil
+				// created's LastModifiedDateTime is from the metadata-only
+				// POST, before the content upload just above - Graph bumps
+				// lastModifiedDateTime on that content write, so re-fetch
+				// rather than return the stale pre-upload value. Otherwise
+				// a file's ModifiedAt recorded on the creating run could
+				// differ from what a later found run reads for the same
+				// physical file - a narrower reintroduction of exactly the
+				// found-versus-created date divergence this chunk's other
+				// fixes close everywhere else.
+				refetched, err := drives.GetItem(ctx, driveID, id)
+				if err != nil {
+					return nil, clues.Wrap(err, fmt.Sprintf("re-fetching seed OneDrive file %q after upload", want.name))
+				}
+
+				return refetched, nil
 			})
 		if err != nil {
 			return nil, summary, err
@@ -170,17 +176,14 @@ func seedOneDrive(ctx context.Context, c api.Client, userID string) ([]ManifestI
 
 		summary.record(fileCreated)
 
-		items = append(items, ManifestItem{
-			Workload:   WorkloadOneDrive,
-			Kind:       "file",
-			ID:         ptr.Val(file.GetId()),
-			Name:       want.name,
-			FolderPath: oneDriveFolderName,
-			SizeBytes:  int64(len(want.content)),
-			CreatedAt:  file.GetCreatedDateTime(),
-			ModifiedAt: file.GetLastModifiedDateTime(),
-			ResourceID: driveID,
-		})
+		items = append(items, datedManifestItem(
+			file,
+			WorkloadOneDrive,
+			"file",
+			want.name,
+			oneDriveFolderName,
+			int64(len(want.content)),
+			driveID))
 	}
 
 	return items, summary, nil

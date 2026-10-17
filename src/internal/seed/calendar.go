@@ -121,16 +121,14 @@ func seedCalendar(ctx context.Context, c api.Client, userID string) ([]ManifestI
 
 		summary.record(evCreated)
 
-		items = append(items, ManifestItem{
-			Workload:   WorkloadExchangeCalendar,
-			Kind:       "event",
-			ID:         ptr.Val(ev.GetId()),
-			Name:       want.subject,
-			FolderPath: calendarName,
-			CreatedAt:  ev.GetCreatedDateTime(),
-			ModifiedAt: ev.GetLastModifiedDateTime(),
-			ResourceID: userID,
-		})
+		items = append(items, datedManifestItem(
+			ev,
+			WorkloadExchangeCalendar,
+			"event",
+			want.subject,
+			calendarName,
+			0,
+			userID))
 	}
 
 	return items, summary, nil

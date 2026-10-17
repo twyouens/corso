@@ -113,16 +113,14 @@ func seedContacts(ctx context.Context, c api.Client, userID string) ([]ManifestI
 
 		summary.record(contactCreated)
 
-		items = append(items, ManifestItem{
-			Workload:   WorkloadExchangeContacts,
-			Kind:       "contact",
-			ID:         ptr.Val(contact.GetId()),
-			Name:       want.displayName,
-			FolderPath: contactsFolderName,
-			CreatedAt:  contact.GetCreatedDateTime(),
-			ModifiedAt: contact.GetLastModifiedDateTime(),
-			ResourceID: userID,
-		})
+		items = append(items, datedManifestItem(
+			contact,
+			WorkloadExchangeContacts,
+			"contact",
+			want.displayName,
+			contactsFolderName,
+			0,
+			userID))
 	}
 
 	return items, summary, nil
