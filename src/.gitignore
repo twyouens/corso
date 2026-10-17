@@ -20,6 +20,10 @@ testlog/
 # Logging
 *.log
 
+# Test-tenant seeding harness output (chunk 0.3): identifies real tenant
+# object IDs, never committed.
+seed-manifest.json
+
 # Build directories
 /bin
 /docker/bin

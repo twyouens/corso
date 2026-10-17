@@ -247,23 +247,27 @@ func seedList(ctx context.Context, c api.Client, siteID string) ([]ManifestItem,
 				li := models.NewListItem()
 				li.SetFields(fields)
 
-				if err := lists.PostListItems(ctx, siteID, listID, []models.ListItemable{li}); err != nil {
+				// Posting through api.Lists.PostListItems and then re-listing
+				// to find the new item's ID (as an earlier version of this
+				// function did) is unreliable: a live run against the real
+				// test tenant proved that re-querying immediately after
+				// creation can miss the just-written item - SharePoint list
+				// item field indexing is eventually, not immediately,
+				// consistent. Posting directly and reading the ID straight
+				// off the creation response avoids that race entirely.
+				created, err := lists.Stable.
+					Client().
+					Sites().
+					BySiteId(siteID).
+					Lists().
+					ByListId(listID).
+					Items().
+					Post(ctx, li, nil)
+				if err != nil {
 					return "", clues.Wrap(err, fmt.Sprintf("creating seed list item %q", title))
 				}
 
-				// PostListItems doesn't hand back the created item's ID, so
-				// look it up by the title we just wrote.
-				refreshed, err := listItemIDsByTitle(ctx, lists, siteID, listID)
-				if err != nil {
-					return "", clues.Wrap(err, "re-listing seed list after creating item")
-				}
-
-				id, found := refreshed[title]
-				if !found {
-					return "", clues.New(fmt.Sprintf("seed list item %q not found after creation", title))
-				}
-
-				return id, nil
+				return ptr.Val(created.GetId()), nil
 			})
 		if err != nil {
 			return nil, err
@@ -346,10 +350,33 @@ func listItemIDsByTitle(
 			return nil, clues.Wrap(err, "getting list item fields")
 		}
 
-		if title, ok := fields.GetAdditionalData()["Title"].(string); ok {
+		if title, ok := stringAdditionalDataValue(fields.GetAdditionalData()["Title"]); ok {
 			out[title] = id
 		}
 	}
 
 	return out, nil
+}
+
+// stringAdditionalDataValue extracts a string value from a Kiota
+// AdditionalData map entry. A live run against the real test tenant proved
+// this cannot be a plain type assertion to string: Kiota deserialises
+// recognised scalar values in AdditionalData as pointers (*string here, for
+// Title), not the bare value, so `v.(string)` always failed, the "already
+// seeded" check in listItemIDsByTitle was always empty, and every seeder run
+// created a fresh duplicate list item instead of finding the one from the
+// run before. This helper accepts either shape.
+func stringAdditionalDataValue(v any) (string, bool) {
+	switch t := v.(type) {
+	case string:
+		return t, true
+	case *string:
+		if t == nil {
+			return "", false
+		}
+
+		return *t, true
+	default:
+		return "", false
+	}
 }

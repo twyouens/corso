@@ -44,26 +44,28 @@ These three credential names (`AZURE_TENANT_ID`, `AZURE_CLIENT_ID`,
 `AZURE_CLIENT_SECRET`) match this fork's `CLAUDE.md`. Earlier in this
 chunk's development, `.secrets/test-tenant.env` briefly defined the same
 three credentials as `M365_TENANT_ID`/`M365_CLIENT_ID`/`M365_CLIENT_SECRET`
-instead; the user decided the guide's names win, and the env file has
-been (or will be) renamed to match. If `go run ./src/cmd/seed` ever reports
-these three as missing, check the env file still uses the `M365_*` names
-and rename them.
+instead; the user decided the guide's names win, and the env file was
+renamed to match. If the seeder ever reports these three as missing,
+check the env file hasn't reverted to the `M365_*` names.
 
 On start-up, both `src/cmd/seed` and the integration test check that every
 variable above (except the optional one) is set, and if not, report the
-exact missing names - never a value - and exit non-zero:
+exact missing names - never a value - and exit non-zero. Demonstrated live,
+from `src/`, with no credentials set:
 
 ```
-$ go run ./src/cmd/seed
+$ go run ./cmd/seed
 missing required environment variable(s): [AZURE_TENANT_ID AZURE_CLIENT_ID AZURE_CLIENT_SECRET SEED_USER_ID SEED_SITE_ID]
 ```
 
 ## Seeding the tenant
 
-From the corso repository root, through the workspace's credential loader:
+From `src/` (there is no `go.mod` at the corso repository root, only
+here - `go run ./src/cmd/seed` from the root does not work), through the
+workspace's credential loader:
 
 ```
-scripts/with-test-tenant.sh go run ./src/cmd/seed
+cd src && GO111MODULE=on GOWORK=off <workspace>/scripts/with-test-tenant.sh go run ./cmd/seed
 ```
 
 This creates (or, on a later run, finds and reuses) in `SEED_USER_ID`'s

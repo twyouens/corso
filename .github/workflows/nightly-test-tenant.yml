@@ -48,6 +48,13 @@ jobs:
           SEED_USER_ID: ${{ vars.SEED_USER_ID }}
           SEED_SITE_ID: ${{ vars.SEED_SITE_ID }}
         run: |
+          # set -o pipefail matters here: without it, this step's exit code
+          # is tee's (always 0), not make's, so the job would report success
+          # even when the suite genuinely failed. A live workflow_dispatch
+          # run against the real test tenant (with no secrets configured
+          # yet) proved exactly this: the step showed green while the log
+          # underneath it read "make: *** [test-integration] Error 1".
+          set -o pipefail
           mkdir -p testlog
           GOWORK=off make test-integration 2>&1 | tee testlog/nightly-test-tenant.log
 
