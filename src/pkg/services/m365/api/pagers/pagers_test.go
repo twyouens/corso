@@ -1426,7 +1426,7 @@ func (suite *PagerUnitSuite) TestNextAndDeltaLink() {
 }
 
 // TestIsLinkValid check to verify is nextLink guard check for logging
-// Related to: https://github.com/twyouens/corso/issues/2520
+// Related to: https://github.com/alcionai/corso/issues/2520
 //
 //nolint:lll
 func (suite *PagerUnitSuite) TestIsLinkValid() {

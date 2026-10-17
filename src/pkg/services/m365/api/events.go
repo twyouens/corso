@@ -70,7 +70,7 @@ func (c Events) DeleteContainer(
 	userID, containerID string,
 ) error {
 	// deletes require unique http clients
-	// https://github.com/twyouens/corso/issues/2707
+	// https://github.com/alcionai/corso/issues/2707
 	srv, err := NewService(c.Credentials, c.counter)
 	if err != nil {
 		return clues.StackWC(ctx, err)
@@ -463,7 +463,7 @@ func (c Events) DeleteItem(
 	userID, itemID string,
 ) error {
 	// deletes require unique http clients
-	// https://github.com/twyouens/corso/issues/2707
+	// https://github.com/alcionai/corso/issues/2707
 	srv, err := c.Service(c.counter)
 	if err != nil {
 		return clues.StackWC(ctx, err)

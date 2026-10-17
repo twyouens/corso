@@ -63,7 +63,7 @@ type BackupM365Config struct {
 	// incremental backups used immutable IDs or if a full backup is being done.
 	ExchangeImmutableIDs bool `json:"exchangeImmutableIDs,omitempty"`
 
-	// see: https://github.com/twyouens/corso/issues/4688
+	// see: https://github.com/alcionai/corso/issues/4688
 	UseOldDriveDeltaProcess bool `json:"useOldDriveDeltaProcess"`
 }
 

@@ -154,7 +154,7 @@ func getFileAttachment(ctx context.Context, attachment models.Attachmentable) (*
 
 	if bytes == nil {
 		// TODO(meain): Handle non file attachments
-		// https://github.com/twyouens/corso/issues/4772
+		// https://github.com/alcionai/corso/issues/4772
 		logger.Ctx(ctx).
 			With("attachment_id", ptr.Val(attachment.GetId()),
 				"attachment_type", ptr.Val(attachment.GetOdataType())).
@@ -368,7 +368,7 @@ func FromMessageable(ctx context.Context, data models.Messageable) (string, erro
 		// TODO: Fetch event object from graph when fetching email
 	case *models.CalendarSharingMessage:
 		// TODO: Parse out calendar sharing message
-		// https://github.com/twyouens/corso/issues/5041
+		// https://github.com/alcionai/corso/issues/5041
 	case *models.EventMessageRequest:
 		cal, err := getICalData(ctx, data)
 		if err != nil {
@@ -468,7 +468,7 @@ func FromJSONPostToEML(
 
 			if bytes == nil {
 				// TODO(meain): Handle non file attachments
-				// https://github.com/twyouens/corso/issues/4772
+				// https://github.com/alcionai/corso/issues/4772
 				//
 				// TODO(pandeyabs): Above issue is for messages.
 				// This is not a problem for posts but leaving it here for safety.

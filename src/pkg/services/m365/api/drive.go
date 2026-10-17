@@ -225,13 +225,13 @@ func (c Drives) PutItemContent(
 }
 
 // deletes require unique http clients
-// https://github.com/twyouens/corso/issues/2707
+// https://github.com/alcionai/corso/issues/2707
 func (c Drives) DeleteItem(
 	ctx context.Context,
 	driveID, itemID string,
 ) error {
 	// deletes require unique http clients
-	// https://github.com/twyouens/corso/issues/2707
+	// https://github.com/alcionai/corso/issues/2707
 	srv, err := c.Service(c.counter)
 	if err != nil {
 		return clues.WrapWC(ctx, err, "creating adapter to delete item permission")
@@ -292,7 +292,7 @@ func (c Drives) DeleteItemPermission(
 	driveID, itemID, permissionID string,
 ) error {
 	// deletes require unique http clients
-	// https://github.com/twyouens/corso/issues/2707
+	// https://github.com/alcionai/corso/issues/2707
 	srv, err := c.Service(c.counter)
 	if err != nil {
 		return clues.WrapWC(ctx, err, "creating adapter to delete item permission")

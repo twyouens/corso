@@ -143,7 +143,7 @@ func fetchPageOptions() *betasites.ItemPagesRequestBuilderGetRequestConfiguratio
 // DeleteSitePage removes the selected page from the SharePoint Site
 // https://learn.microsoft.com/en-us/graph/api/sitepage-delete?view=graph-rest-beta
 // deletes require unique http clients
-// https://github.com/twyouens/corso/issues/2707
+// https://github.com/alcionai/corso/issues/2707
 func DeleteSitePage(
 	ctx context.Context,
 	serv *BetaService,

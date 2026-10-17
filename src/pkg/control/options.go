@@ -102,7 +102,7 @@ type Toggles struct {
 	// bucket rate limiter.
 	DisableSlidingWindowLimiter bool `json:"disableSlidingWindowLimiter"`
 
-	// see: https://github.com/twyouens/corso/issues/4688
+	// see: https://github.com/alcionai/corso/issues/4688
 	UseDeltaTree       bool `json:"useDeltaTree"`
 	UseOldDeltaProcess bool `json:"useOldDeltaProcess"`
 

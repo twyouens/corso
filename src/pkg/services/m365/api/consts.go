@@ -78,7 +78,7 @@ const (
 	DescoratorFieldNamePrefix       = "@"
 
 	WebTemplateExtensionsListTemplate = "webTemplateExtensionsList"
-	// This issue https://github.com/twyouens/corso/issues/4932
+	// This issue https://github.com/alcionai/corso/issues/4932
 	// tracks to backup/restore supportability of `documentLibrary` templated lists
 	DocumentLibraryListTemplate = "documentLibrary"
 	SharingLinksListTemplate    = "sharingLinks"

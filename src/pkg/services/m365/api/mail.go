@@ -72,7 +72,7 @@ func (c Mail) DeleteContainer(
 	userID, containerID string,
 ) error {
 	// deletes require unique http clients
-	// https://github.com/twyouens/corso/issues/2707
+	// https://github.com/alcionai/corso/issues/2707
 	srv, err := NewService(c.Credentials, c.counter)
 	if err != nil {
 		return clues.StackWC(ctx, err)
@@ -506,7 +506,7 @@ func (c Mail) DeleteItem(
 	userID, itemID string,
 ) error {
 	// deletes require unique http clients
-	// https://github.com/twyouens/corso/issues/2707
+	// https://github.com/alcionai/corso/issues/2707
 	srv, err := NewService(c.Credentials, c.counter)
 	if err != nil {
 		return clues.StackWC(ctx, err)

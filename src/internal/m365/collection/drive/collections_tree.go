@@ -29,7 +29,7 @@ import (
 
 // this file is used to separate the collections handling between the previous
 // (list-based) design, and the in-progress (tree-based) redesign.
-// see: https://github.com/twyouens/corso/issues/4688
+// see: https://github.com/alcionai/corso/issues/4688
 
 func (c *Collections) getTree(
 	ctx context.Context,

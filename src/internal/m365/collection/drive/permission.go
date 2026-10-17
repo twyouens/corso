@@ -212,7 +212,7 @@ func UpdatePermissions(
 			"permission_entity_email", clues.Hide(p.Email))
 
 		// deletes require unique http clients
-		// https://github.com/twyouens/corso/issues/2707
+		// https://github.com/alcionai/corso/issues/2707
 		// this is bad citizenship, and could end up consuming a lot of
 		// system resources if servicers leak client connections (sockets, etc).
 

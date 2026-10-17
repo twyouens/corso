@@ -30,7 +30,7 @@ import (
 // https://learn.microsoft.com/en-us/graph/api/resources/event?view=graph-rest-1.0
 // https://learn.microsoft.com/en-us/openspecs/exchange_server_protocols/ms-oxcical/a685a040-5b69-4c84-b084-795113fb4012
 
-// TODO locations: https://github.com/twyouens/corso/issues/5003
+// TODO locations: https://github.com/alcionai/corso/issues/5003
 
 const (
 	ICalDateTimeFormat    = "20060102T150405"
@@ -677,7 +677,7 @@ func updateEventProperties(ctx context.Context, event models.Eventable, iCalEven
 
 		if cb == nil {
 			// TODO(meain): Handle non file attachments
-			// https://github.com/twyouens/corso/issues/4772
+			// https://github.com/alcionai/corso/issues/4772
 			logger.Ctx(ctx).
 				With("attachment_id", ptr.Val(attachment.GetId()),
 					"attachment_type", ptr.Val(attachment.GetOdataType())).
