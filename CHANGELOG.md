@@ -6,6 +6,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased] (beta)
+### Docs
+- Audited the Alcion Kopia fork pinned in `src/go.mod` against its upstream base; see `docs/kopia-fork-audit.md` for the fork-only dependency inventory and the recommendation to move to current upstream Kopia.
+
 ### Fixed
 - Handle the case where an email or event cannot be retrieved from Exchange due to an `ErrorCorruptData` error. Corso will skip over the item but report it in the backup summary.
 - Emails attached within other emails are now correctly exported
