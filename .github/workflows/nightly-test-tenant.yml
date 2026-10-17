@@ -1,0 +1,69 @@
+name: Nightly test tenant
+
+# Runs the test-tenant integration harness (src/internal/seed) against the
+# real Microsoft 365 test tenant. Separate from ci.yml's `check` job, which
+# never touches the test tenant and runs on every pull request; this job
+# runs on a schedule (or on demand) because it costs real Graph calls.
+on:
+  workflow_dispatch:
+
+  schedule:
+    # 04:00 UTC daily.
+    - cron: "0 4 * * *"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nightly-test-tenant-${{ github.workflow }}
+  cancel-in-progress: true
+
+jobs:
+  test-integration:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: src
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Golang with cache
+        uses: ./.github/actions/go-setup-cache
+        with:
+          go-version-file: src/go.mod
+
+      - name: Seed and run the test-tenant integration suite
+        env:
+          # Credentials: repository secrets, never a file in this
+          # repository. If any of these three is missing, src/internal/seed
+          # reports its exact name (never a value) and the step below fails
+          # with that message rather than a stack trace.
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+          # Not credentials - the existing, already-licensed test user and
+          # existing SharePoint site the harness seeds dedicated, prefixed
+          # folders into. Repository variables (not secrets) because they
+          # are plain identifiers, not sensitive values.
+          SEED_USER_ID: ${{ vars.SEED_USER_ID }}
+          SEED_SITE_ID: ${{ vars.SEED_SITE_ID }}
+        run: |
+          mkdir -p testlog
+          GOWORK=off make test-integration 2>&1 | tee testlog/nightly-test-tenant.log
+
+      - name: Upload test log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nightly-test-tenant-log
+          path: src/testlog/*
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "### Nightly test tenant run" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "Job status: ${{ job.status }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "See the uploaded log artifact for full output." >> "$GITHUB_STEP_SUMMARY"

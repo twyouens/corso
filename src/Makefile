@@ -6,7 +6,7 @@ HAS_LINT := $(shell which golangci-lint)
 INSTALL_LINT_PAGE := "https://golangci-lint.run/usage/install/"
 BAD_LINT_MSG := "Missing golangci-lint version $(WANTED_LINT_VERSION). Visit $(INSTALL_LINT_PAGE) for instructions on how to install"
 
-.PHONY: check-lint check-lint-version lint load-test check
+.PHONY: check-lint check-lint-version lint load-test check test-integration
 
 build:
 	go build -o corso
@@ -21,6 +21,20 @@ check:
 	GOWORK=off go build ./...
 	GOWORK=off $(MAKE) lint
 	GOWORK=off go test ./...
+
+# test-integration runs the test-tenant harness's one integration test
+# (src/internal/seed) against the real Microsoft 365 test tenant. It is
+# deliberately NOT part of `check`/CI on every pull request: it costs real
+# Graph calls. Run it through the workspace's credential loader, from the
+# workspace root:
+#
+#   scripts/with-test-tenant.sh make -C worktrees/corso-0.3/src test-integration
+#
+# CORSO_NIGHTLY_TESTS enables the gated suite the same way
+# .github/workflows/nightly-test-tenant.yml does; credential validation
+# happens inside the suite itself and reports any missing variable by name.
+test-integration:
+	CORSO_NIGHTLY_TESTS=true GOWORK=off go test -tags testing -v -count=1 -timeout 30m ./internal/seed/...
 
 fmt:
 	gofumpt -w .
