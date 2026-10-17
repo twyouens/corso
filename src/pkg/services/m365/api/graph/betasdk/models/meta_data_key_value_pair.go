@@ -2,7 +2,6 @@ package models
 
 import (
 	i878a80d2330e89d26896388a3f487eef27b0a0e6c010c493bf80be1452208f91 "github.com/microsoft/kiota-abstractions-go/serialization"
-	msmodel "github.com/microsoftgraph/msgraph-sdk-go/models"
 )
 
 // MetaDataKeyValuePair
@@ -14,7 +13,7 @@ type MetaDataKeyValuePair struct {
 	// The OdataType property
 	odataType *string
 	// Value of the metadata. Should be an object.
-	value msmodel.Jsonable
+	value i878a80d2330e89d26896388a3f487eef27b0a0e6c010c493bf80be1452208f91.UntypedNodeable
 }
 
 // NewMetaDataKeyValuePair instantiates a new metaDataKeyValuePair and sets the default values.
@@ -58,12 +57,12 @@ func (m *MetaDataKeyValuePair) GetFieldDeserializers() map[string]func(i878a80d2
 		return nil
 	}
 	res["value"] = func(n i878a80d2330e89d26896388a3f487eef27b0a0e6c010c493bf80be1452208f91.ParseNode) error {
-		val, err := n.GetObjectValue(msmodel.CreateJsonFromDiscriminatorValue)
+		val, err := n.GetObjectValue(i878a80d2330e89d26896388a3f487eef27b0a0e6c010c493bf80be1452208f91.CreateUntypedNodeFromDiscriminatorValue)
 		if err != nil {
 			return err
 		}
 		if val != nil {
-			m.SetValue(val.(msmodel.Jsonable))
+			m.SetValue(val.(i878a80d2330e89d26896388a3f487eef27b0a0e6c010c493bf80be1452208f91.UntypedNodeable))
 		}
 		return nil
 	}
@@ -81,7 +80,7 @@ func (m *MetaDataKeyValuePair) GetOdataType() *string {
 }
 
 // GetValue gets the value property value. Value of the metadata. Should be an object.
-func (m *MetaDataKeyValuePair) GetValue() msmodel.Jsonable {
+func (m *MetaDataKeyValuePair) GetValue() i878a80d2330e89d26896388a3f487eef27b0a0e6c010c493bf80be1452208f91.UntypedNodeable {
 	return m.value
 }
 
@@ -130,6 +129,6 @@ func (m *MetaDataKeyValuePair) SetOdataType(value *string) {
 }
 
 // SetValue sets the value property value. Value of the metadata. Should be an object.
-func (m *MetaDataKeyValuePair) SetValue(value msmodel.Jsonable) {
+func (m *MetaDataKeyValuePair) SetValue(value i878a80d2330e89d26896388a3f487eef27b0a0e6c010c493bf80be1452208f91.UntypedNodeable) {
 	m.value = value
 }

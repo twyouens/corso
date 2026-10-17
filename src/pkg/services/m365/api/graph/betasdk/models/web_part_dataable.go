@@ -2,7 +2,6 @@ package models
 
 import (
 	i878a80d2330e89d26896388a3f487eef27b0a0e6c010c493bf80be1452208f91 "github.com/microsoft/kiota-abstractions-go/serialization"
-	msmodel "github.com/microsoftgraph/msgraph-sdk-go/models"
 )
 
 // WebPartDataable
@@ -13,14 +12,14 @@ type WebPartDataable interface {
 	GetDataVersion() *string
 	GetDescription() *string
 	GetOdataType() *string
-	GetProperties() msmodel.Jsonable
+	GetProperties() i878a80d2330e89d26896388a3f487eef27b0a0e6c010c493bf80be1452208f91.UntypedNodeable
 	GetServerProcessedContent() ServerProcessedContentable
 	GetTitle() *string
 	SetAudiences(value []string)
 	SetDataVersion(value *string)
 	SetDescription(value *string)
 	SetOdataType(value *string)
-	SetProperties(value msmodel.Jsonable)
+	SetProperties(value i878a80d2330e89d26896388a3f487eef27b0a0e6c010c493bf80be1452208f91.UntypedNodeable)
 	SetServerProcessedContent(value ServerProcessedContentable)
 	SetTitle(value *string)
 }

@@ -2,7 +2,6 @@ package models
 
 import (
 	i878a80d2330e89d26896388a3f487eef27b0a0e6c010c493bf80be1452208f91 "github.com/microsoft/kiota-abstractions-go/serialization"
-	msmodel "github.com/microsoftgraph/msgraph-sdk-go/models"
 )
 
 // WebPartData
@@ -18,7 +17,7 @@ type WebPartData struct {
 	// The OdataType property
 	odataType *string
 	// Properties bag of the web part.
-	properties msmodel.Jsonable
+	properties i878a80d2330e89d26896388a3f487eef27b0a0e6c010c493bf80be1452208f91.UntypedNodeable
 	// Contains collections of data that can be processed by server side services like search index and link fixup.
 	serverProcessedContent ServerProcessedContentable
 	// Title of the web part.
@@ -105,12 +104,12 @@ func (m *WebPartData) GetFieldDeserializers() map[string]func(i878a80d2330e89d26
 		return nil
 	}
 	res["properties"] = func(n i878a80d2330e89d26896388a3f487eef27b0a0e6c010c493bf80be1452208f91.ParseNode) error {
-		val, err := n.GetObjectValue(msmodel.CreateJsonFromDiscriminatorValue)
+		val, err := n.GetObjectValue(i878a80d2330e89d26896388a3f487eef27b0a0e6c010c493bf80be1452208f91.CreateUntypedNodeFromDiscriminatorValue)
 		if err != nil {
 			return err
 		}
 		if val != nil {
-			m.SetProperties(val.(msmodel.Jsonable))
+			m.SetProperties(val.(i878a80d2330e89d26896388a3f487eef27b0a0e6c010c493bf80be1452208f91.UntypedNodeable))
 		}
 		return nil
 	}
@@ -143,7 +142,7 @@ func (m *WebPartData) GetOdataType() *string {
 }
 
 // GetProperties gets the properties property value. Properties bag of the web part.
-func (m *WebPartData) GetProperties() msmodel.Jsonable {
+func (m *WebPartData) GetProperties() i878a80d2330e89d26896388a3f487eef27b0a0e6c010c493bf80be1452208f91.UntypedNodeable {
 	return m.properties
 }
 
@@ -236,7 +235,7 @@ func (m *WebPartData) SetOdataType(value *string) {
 }
 
 // SetProperties sets the properties property value. Properties bag of the web part.
-func (m *WebPartData) SetProperties(value msmodel.Jsonable) {
+func (m *WebPartData) SetProperties(value i878a80d2330e89d26896388a3f487eef27b0a0e6c010c493bf80be1452208f91.UntypedNodeable) {
 	m.properties = value
 }
 
