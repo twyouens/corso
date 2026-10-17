@@ -448,12 +448,37 @@ func batchWithMaxItemCount[T any](
 	// Can't use a for-loop variable declaration because the line ends up too
 	// long.
 	for !done && (itemLimit <= 0 || len(added) < itemLimit) {
-		// If the context was cancelled then exit early. This will keep us from
-		// accidentally reading from the pager more since it could pick to either
-		// send another page or see the context cancellation. We don't need to
-		// cancel the pager because it should see the context cancellation once we
-		// stop attempting to fetch the next page.
+		// If the context was cancelled then exit early.
+		//
+		// This used to skip calling Cancel/Results here, on the theory that the
+		// background goroutine (started by GetAddedAndRemovedItemIDs via
+		// EnumerateItems/DeltaEnumerateItems) "should see the context
+		// cancellation once we stop attempting to fetch the next page" and stop
+		// on its own. That reasoning was incomplete: not waiting for it to
+		// actually stop meant this function - and, through it,
+		// GetAddedAndRemovedItemIDs, which reads the pager's own
+		// ValidModTimes() immediately after this returns - could race with
+		// that goroutine's last pager.GetPage() call, which mutates the
+		// pager's internal state. Confirmed with `go test -race
+		// ./pkg/services/m365/api/pagers/...`: the write from GetPage() (via
+		// the goroutine spawned at the `go DeltaEnumerateItems(...)`/`go
+		// EnumerateItems(...)` call sites) and the read from ValidModTimes()
+		// raced with no synchronization between them on exactly this path, and
+		// the same gap existed below on the getAddedAndRemoved-error path.
+		//
+		// Cancel (idempotent to call once here, since every return in this
+		// function is mutually exclusive) tells the goroutine to stop issuing
+		// further page requests; Results blocks until it actually has -
+		// npr.close() happens only after the goroutine returns, and a channel
+		// close happens-before a receive that observes it, so waiting here
+		// guarantees no more pager state changes can happen after this
+		// function returns. The specific ctx error below is still what gets
+		// returned; Results' own return value is intentionally discarded, used
+		// only for this synchronization.
 		if ctx.Err() != nil {
+			resultsPager.Cancel()
+			resultsPager.Results() //nolint:errcheck // synchronization only; see comment above
+
 			return nil, nil, DeltaUpdate{}, clues.StackWC(ctx, ctx.Err(), context.Cause(ctx))
 		}
 
@@ -470,7 +495,14 @@ func batchWithMaxItemCount[T any](
 
 		pageAdded, pageRemoved, err := getAddedAndRemoved(page, filters...)
 		if err != nil {
+			// See the ctx.Err() branch above: Results must be waited on too, not
+			// just Cancel, or this function (and its caller, which reads the
+			// pager's ValidModTimes() right after) can return before the
+			// goroutine spawned by GetAddedAndRemovedItemIDs has actually
+			// stopped touching the pager.
 			resultsPager.Cancel()
+			resultsPager.Results() //nolint:errcheck // synchronization only; see comment above
+
 			return nil, nil, DeltaUpdate{}, clues.StackWC(ctx, err)
 		}
 

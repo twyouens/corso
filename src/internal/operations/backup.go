@@ -53,6 +53,17 @@ type BackupOperation struct {
 	// should be removed when we have a more controlled workaround.
 	BackupVersion int
 
+	// AdditionalTags holds caller-supplied tags (pkg/engine's Backup is the
+	// only promoted caller today) to persist on the resulting backup model
+	// alongside the fork's own bookkeeping tags (model.ServiceTag,
+	// model.BackupTypeTag). persistResults below merges these in without
+	// ever letting one override a key the fork itself already set: those
+	// two tags drive merge/assist/preview base-selection logic elsewhere,
+	// so a caller-controlled value colliding with them must never take
+	// effect, even if some future caller bypasses pkg/engine's own
+	// reserved-key validation and sets this field directly.
+	AdditionalTags map[string]string
+
 	account account.Account
 	bp      inject.BackupProducer
 
@@ -1013,6 +1024,8 @@ func (op *BackupOperation) createBackupModels(
 
 	ctx = clues.Add(ctx, model.BackupTypeTag, tags[model.BackupTypeTag])
 
+	mergeAdditionalTags(tags, op.AdditionalTags)
+
 	b := backup.New(
 		snapID, ssid,
 		op.Status.String(),
@@ -1033,4 +1046,27 @@ func (op *BackupOperation) createBackupModels(
 	}
 
 	return nil
+}
+
+// mergeAdditionalTags adds every key in additional to tags that tags does
+// not already contain, mutating tags in place. A key already present in
+// tags - in practice always model.ServiceTag and model.BackupTypeTag, set
+// just above in createBackupModels - is never overwritten.
+//
+// This is what stops a caller-supplied tag (pkg/engine.BackupRequest.Tags)
+// from silently colliding with, and corrupting, the fork's own bookkeeping
+// tags that merge/assist/preview base-selection logic elsewhere depends on.
+// pkg/engine additionally rejects a caller's reserved-key tag outright
+// before a backup ever starts (a better caller experience: a clear error
+// up front, rather than a silently dropped tag); this function is the
+// defense-in-depth backstop for any other caller of AdditionalTags, now or
+// in the future, that skips that check.
+func mergeAdditionalTags(tags, additional map[string]string) {
+	for k, v := range additional {
+		if _, exists := tags[k]; exists {
+			continue
+		}
+
+		tags[k] = v
+	}
 }
