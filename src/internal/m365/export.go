@@ -16,20 +16,25 @@ import (
 func (ctrl *Controller) NewServiceHandler(
 	service path.ServiceType,
 ) (inject.ServiceHandler, error) {
-	ctrl.setResourceHandler(service)
+	// Use setResourceHandler's own return value rather than a second,
+	// separate read of ctrl.resourceHandler: that field is shared across
+	// concurrently reused Controllers (see its doc comment), and a second
+	// unguarded read here could observe a different, later write than the
+	// one this call itself just made.
+	rh := ctrl.setResourceHandler(service)
 
 	switch service {
 	case path.OneDriveService:
-		return onedrive.NewOneDriveHandler(ctrl.AC, ctrl.resourceHandler), nil
+		return onedrive.NewOneDriveHandler(ctrl.AC, rh), nil
 
 	case path.SharePointService:
-		return sharepoint.NewSharePointHandler(ctrl.AC, ctrl.resourceHandler), nil
+		return sharepoint.NewSharePointHandler(ctrl.AC, rh), nil
 
 	case path.GroupsService:
-		return groups.NewGroupsHandler(ctrl.AC, ctrl.resourceHandler), nil
+		return groups.NewGroupsHandler(ctrl.AC, rh), nil
 
 	case path.ExchangeService:
-		return exchange.NewExchangeHandler(ctrl.AC, ctrl.resourceHandler), nil
+		return exchange.NewExchangeHandler(ctrl.AC, rh), nil
 	}
 
 	return nil, clues.New("unrecognized service").

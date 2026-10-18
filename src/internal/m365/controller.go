@@ -39,6 +39,18 @@ type Controller struct {
 	tenant      string
 	credentials account.M365Config
 
+	// resourceHandler and IDNameLookup below are both guarded by mu (see
+	// its updated comment): a Controller is created once per repository
+	// connection and reused across every later ConnectDataProvider call
+	// on that connection (pkg/repository's connectToM365), each of which
+	// may run concurrently with another on a different goroutine - two
+	// concurrent pkg/engine.Backup calls on one *engine.Repository is
+	// exactly this shape. Before this lock was added, EnsureResourceHandler
+	// writing resourceHandler while PopulateProtectedResourceIDAndName read
+	// it was a confirmed data race (go test -race), and the race's
+	// real-world failure mode is not just a torn read: EnsureResourceHandler
+	// could legitimately change resourceHandler mid-operation and resolve a
+	// SharePoint site through the previous operation's Users getter.
 	resourceHandler idname.GetResourceIDAndNamer
 	// maps of resource owner ids to names, and names to ids.
 	// not guaranteed to be populated, only here as a post-population
@@ -49,7 +61,9 @@ type Controller struct {
 	wg     *sync.WaitGroup
 	region *trace.Region
 
-	// mutex used to synchronize updates to `status`
+	// mu synchronizes updates to `status`, `resourceHandler` and
+	// `IDNameLookup` - every field a Controller mutates after
+	// construction while potentially shared across concurrent operations.
 	mu     sync.Mutex
 	status support.ControllerOperationStatus // contains the status of the last run status
 
@@ -108,29 +122,49 @@ func (ctrl *Controller) VerifyAccess(ctx context.Context) error {
 
 // EnsureResourceHandler re-derives this controller's resource lookup
 // handler for serviceInOperation, overwriting whatever it was set to
-// before.
+// before. Safe to call concurrently with itself and with
+// PopulateProtectedResourceIDAndName/NewServiceHandler on the same
+// Controller - see mu's doc comment on the struct.
 //
 // A Controller is created once per repository connection and, in
 // pkg/repository's connectToM365, reused across every later call to
 // ConnectDataProvider on that same repository - which happens once per
-// backup, restore or export, each potentially naming a different service.
-// Without this, a Controller first created for one service (or for
-// path.UnknownService, which chunk 0.6's pkg/engine passes while opening a
-// repository before any backup has chosen a service yet) keeps that
-// service's resource handler forever, and PopulateProtectedResourceIDAndName
-// panics on a nil handler the first time a later call asks for a different
-// service. Confirmed live against the test tenant: pkg/engine opens a
-// repository (which connects a provider for path.UnknownService, since no
-// service is known yet) and then calls Backup with an Exchange selector,
-// which panicked on exactly this before this fix.
+// backup, restore or export, each potentially naming a different service,
+// and, in k3ep's long-lived-worker shape, potentially concurrently with
+// another such call on the same connection. Without this, a Controller
+// first created for one service (or for path.UnknownService, which chunk
+// 0.6's pkg/engine passes while opening a repository before any backup has
+// chosen a service yet) keeps that service's resource handler forever, and
+// PopulateProtectedResourceIDAndName panics on a nil handler the first time
+// a later call asks for a different service. Confirmed live against the
+// test tenant: pkg/engine opens a repository (which connects a provider
+// for path.UnknownService, since no service is known yet) and then calls
+// Backup with an Exchange selector, which panicked on exactly this before
+// this fix.
 func (ctrl *Controller) EnsureResourceHandler(serviceInOperation path.ServiceType) {
 	ctrl.setResourceHandler(serviceInOperation)
 }
 
+// setResourceHandler derives the resource lookup handler for
+// serviceInOperation, stores it, and also returns it, so a caller that
+// needs the value right away (NewServiceHandler) does not have to take a
+// second, separate, racy read of the shared field.
+//
+// rh is declared with the idname.GetResourceIDAndNamer interface type, not
+// the concrete *resourceGetter pointer type, deliberately: assigning a nil
+// *resourceGetter to an interface-typed field produces a non-nil interface
+// holding a nil concrete value (a classic Go footgun - the interface's type
+// word is set even though its data word is nil), so
+// `ctrl.resourceHandler == nil` in PopulateProtectedResourceIDAndName would
+// never be true for an unrecognized service, and the method would instead
+// panic inside GetResourceIDAndNameFrom on a nil pointer receiver rather
+// than returning the documented ErrNoResourceLookup. Declaring rh as the
+// interface type keeps its zero value a true nil interface whenever no
+// switch case matches.
 func (ctrl *Controller) setResourceHandler(
 	serviceInOperation path.ServiceType,
-) {
-	var rh *resourceGetter
+) idname.GetResourceIDAndNamer {
+	var rh idname.GetResourceIDAndNamer
 
 	switch serviceInOperation {
 	case path.ExchangeService, path.OneDriveService, path.TeamsChatsService:
@@ -150,7 +184,11 @@ func (ctrl *Controller) setResourceHandler(
 		}
 	}
 
+	ctrl.mu.Lock()
 	ctrl.resourceHandler = rh
+	ctrl.mu.Unlock()
+
+	return rh
 }
 
 // ---------------------------------------------------------------------------
@@ -299,16 +337,28 @@ func (ctrl *Controller) PopulateProtectedResourceIDAndName(
 	resourceID string, // input value, can be either id or name
 	ins idname.Cacher,
 ) (idname.Provider, error) {
-	if ctrl.resourceHandler == nil {
+	// Snapshot the handler under the lock rather than holding the lock
+	// across the lookup call below: the lookup can make a real Graph
+	// request, and holding mu for that long would serialize unrelated
+	// concurrent operations (status updates, another EnsureResourceHandler
+	// call) against it for no reason. The snapshot itself is what the race
+	// was on - see mu's doc comment on the Controller struct.
+	ctrl.mu.Lock()
+	rh := ctrl.resourceHandler
+	ctrl.mu.Unlock()
+
+	if rh == nil {
 		return nil, clues.StackWC(ctx, ErrNoResourceLookup)
 	}
 
-	pr, err := ctrl.resourceHandler.GetResourceIDAndNameFrom(ctx, resourceID, ins)
+	pr, err := rh.GetResourceIDAndNameFrom(ctx, resourceID, ins)
 	if err != nil {
 		return nil, clues.Wrap(err, "identifying resource owner")
 	}
 
+	ctrl.mu.Lock()
 	ctrl.IDNameLookup = idname.NewCache(map[string]string{pr.ID(): pr.Name()})
+	ctrl.mu.Unlock()
 
 	return pr, nil
 }
