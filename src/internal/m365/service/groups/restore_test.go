@@ -75,7 +75,6 @@ func TestGroupsIntegrationSuite(t *testing.T) {
 func (suite *groupsIntegrationSuite) SetupSuite() {
 	t := suite.T()
 	suite.m365 = its.GetM365(t)
-
 }
 
 // test for getSiteName

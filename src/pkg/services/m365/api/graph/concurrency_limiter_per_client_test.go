@@ -1,6 +1,7 @@
 package graph
 
 import (
+	"context"
 	"go/ast"
 	"go/parser"
 	"go/token"
@@ -134,7 +135,20 @@ func (or *overlapRecorder) server(t *testing.T, label string) *httptest.Server {
 
 // hammer fires requestCount concurrent GETs at url through client and waits
 // for all of them.
-func hammer(t *testing.T, client *http.Client, url string, requestCount int) {
+//
+// Every request carries ctx, which must be a logger-seeded context (one from
+// tester.NewContext).  That is load-bearing under -race, and not about this
+// chunk: pkg/logger.singleton lazily writes package-level state - loggerton,
+// logCore and clues.SetHasher - with no synchronisation, so the first
+// logger.Ctx call on a context with no logger in it races against any
+// concurrent one.  graph's LoggingMiddleware calls logger.Ctx on the
+// request's context for every response, so concurrent requests on a
+// background context trip that pre-existing race.  Passing a seeded context
+// means the logger is read from the context and the lazy singleton is never
+// reached.
+func hammer(ctx context.Context, t *testing.T, client *http.Client, url string, requestCount int) {
+	t.Helper()
+
 	var wg sync.WaitGroup
 
 	for i := 0; i < requestCount; i++ {
@@ -143,7 +157,12 @@ func hammer(t *testing.T, client *http.Client, url string, requestCount int) {
 		go func() {
 			defer wg.Done()
 
-			resp, err := client.Get(url)
+			req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+			if !assert.NoError(t, err) {
+				return
+			}
+
+			resp, err := client.Do(req)
 			if !assert.NoError(t, err) {
 				return
 			}
@@ -202,6 +221,9 @@ func (suite *PerClientConcurrencyLimiterUnitSuite) TestConcurrencyLimiter_TwoCli
 		suite.Run(test.name, func() {
 			t := suite.T()
 
+			ctx, flush := tester.NewContext(t)
+			defer flush()
+
 			var narrowClient, wideClient *http.Client
 
 			// Build in the order under test.  With a process-global,
@@ -225,12 +247,12 @@ func (suite *PerClientConcurrencyLimiterUnitSuite) TestConcurrencyLimiter_TwoCli
 
 			go func() {
 				defer wg.Done()
-				hammer(t, narrowClient, narrowSrv.URL, requestCount)
+				hammer(ctx, t, narrowClient, narrowSrv.URL, requestCount)
 			}()
 
 			go func() {
 				defer wg.Done()
-				hammer(t, wideClient, wideSrv.URL, requestCount)
+				hammer(ctx, t, wideClient, wideSrv.URL, requestCount)
 			}()
 
 			wg.Wait()
@@ -263,6 +285,9 @@ func (suite *PerClientConcurrencyLimiterUnitSuite) TestConcurrencyLimiter_TwoCli
 func (suite *PerClientConcurrencyLimiterUnitSuite) TestConcurrencyLimiter_ContentionIsReal() {
 	t := suite.T()
 
+	ctx, flush := tester.NewContext(t)
+	defer flush()
+
 	const requestCount = 8
 
 	// target is unreachable on purpose: with capacity 1 the recorder can
@@ -273,7 +298,7 @@ func (suite *PerClientConcurrencyLimiterUnitSuite) TestConcurrencyLimiter_Conten
 	srv := rec.server(t, "only")
 
 	limited, _ := KiotaHTTPClient(count.New(), ConcurrencyLimit(1))
-	hammer(t, limited, srv.URL, requestCount)
+	hammer(ctx, t, limited, srv.URL, requestCount)
 
 	require.Equal(t, 1, rec.peakFor("only"), "capacity-1 client peak in-flight")
 
@@ -283,7 +308,7 @@ func (suite *PerClientConcurrencyLimiterUnitSuite) TestConcurrencyLimiter_Conten
 	unlimitedRec := newOverlapRecorder(requestCount, 2*time.Second)
 	unlimitedSrv := unlimitedRec.server(t, "only")
 
-	hammer(t, unlimited, unlimitedSrv.URL, requestCount)
+	hammer(ctx, t, unlimited, unlimitedSrv.URL, requestCount)
 
 	assert.Greater(
 		t,
@@ -372,6 +397,9 @@ func (suite *PerClientConcurrencyLimiterUnitSuite) TestKiotaMiddlewares_AlwaysIn
 func (suite *PerClientConcurrencyLimiterUnitSuite) TestConcurrencyLimiter_EveryClientIsLimited() {
 	t := suite.T()
 
+	ctx, flush := tester.NewContext(t)
+	defer flush()
+
 	const requestCount = 12
 
 	rec := newOverlapRecorder(maxConcurrentRequests, 2*time.Second)
@@ -380,7 +408,7 @@ func (suite *PerClientConcurrencyLimiterUnitSuite) TestConcurrencyLimiter_EveryC
 	defaulted, cc := KiotaHTTPClient(count.New())
 	assert.Equal(t, maxConcurrentRequests, cc.concurrencyLimit, "default client concurrency limit")
 
-	hammer(t, defaulted, srv.URL, requestCount)
+	hammer(ctx, t, defaulted, srv.URL, requestCount)
 
 	assert.Equal(
 		t,

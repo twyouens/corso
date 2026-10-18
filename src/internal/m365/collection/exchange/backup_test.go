@@ -497,7 +497,6 @@ func TestBackupIntgSuite(t *testing.T) {
 func (suite *BackupIntgSuite) SetupSuite() {
 	t := suite.T()
 	suite.m365 = its.GetM365(t)
-
 }
 
 func (suite *BackupIntgSuite) TestMailFetch() {

@@ -49,7 +49,6 @@ func TestURLCacheIntegrationSuite(t *testing.T) {
 func (suite *URLCacheIntegrationSuite) SetupSuite() {
 	t := suite.T()
 	suite.m365 = its.GetM365(t)
-
 }
 
 // Basic test for urlCache. Create some files in onedrive, then access them via

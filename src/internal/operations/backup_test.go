@@ -1519,7 +1519,6 @@ func TestBackupOpIntegrationSuite(t *testing.T) {
 func (suite *BackupOpIntegrationSuite) SetupSuite() {
 	t := suite.T()
 	suite.m365 = its.GetM365(t)
-
 }
 
 func (suite *BackupOpIntegrationSuite) TestNewBackupOperation() {

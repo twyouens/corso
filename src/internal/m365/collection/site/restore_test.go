@@ -93,7 +93,6 @@ type SharePointRestoreSuite struct {
 func (suite *SharePointRestoreSuite) SetupSuite() {
 	t := suite.T()
 	suite.m365 = its.GetM365(t)
-
 }
 
 func TestSharePointRestoreSuite(t *testing.T) {

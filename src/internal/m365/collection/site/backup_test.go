@@ -345,7 +345,6 @@ func TestSharePointSuite(t *testing.T) {
 func (suite *SharePointBackupIntgSuite) SetupSuite() {
 	t := suite.T()
 	suite.m365 = its.GetM365(t)
-
 }
 
 func (suite *SharePointBackupIntgSuite) TestCollectPages() {
