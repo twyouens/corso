@@ -1,13 +1,13 @@
 package repository
 
 import (
-	"context"
 	"testing"
 
 	"github.com/alcionai/clues"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/twyouens/corso/src/internal/tester"
 	"github.com/twyouens/corso/src/pkg/account"
 	"github.com/twyouens/corso/src/pkg/control"
 	"github.com/twyouens/corso/src/pkg/credentials"
@@ -135,7 +135,9 @@ func TestS3CredentialLessConfigNeverReachesAnEndpoint(t *testing.T) {
 		}
 
 		t.Run(name, func(t *testing.T) {
-			ctx := context.Background()
+			ctx, flush := tester.NewContext(t)
+			defer flush()
+
 			st := credentialLessStorage(t, rec.Endpoint, spelling)
 
 			// The storage layer refuses to derive an S3 config at all.

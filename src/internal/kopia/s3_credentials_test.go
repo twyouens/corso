@@ -1,11 +1,11 @@
 package kopia
 
 import (
-	"context"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 
+	"github.com/twyouens/corso/src/internal/tester"
 	"github.com/twyouens/corso/src/pkg/control/repository"
 	"github.com/twyouens/corso/src/pkg/credentials"
 	"github.com/twyouens/corso/src/pkg/storage"
@@ -35,7 +35,9 @@ func TestS3BlobStorage_RefusesCredentialLessConfig(t *testing.T) {
 	t.Setenv(credentials.AWSSessionToken, "")
 
 	rec := storeTD.NewS3RequestRecorder(t)
-	ctx := context.Background()
+
+	ctx, flush := tester.NewContext(t)
+	defer flush()
 
 	table := []struct {
 		name      string
