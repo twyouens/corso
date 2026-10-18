@@ -142,8 +142,25 @@ func (r *Repository) Backup(ctx context.Context, req BackupRequest) (BackupPoint
 }
 
 // ListBackupPoints returns every backup point carrying all the key/value
-// pairs in tags. A nil or empty tags returns every backup point in the
-// repository.
+// pairs in tags - a nil or empty tags returns every backup point in the
+// repository, across every tenant if the repository ever holds more than
+// one (see ErrEmptyTagFilter's and RepositoryConfig's doc comments: this
+// package has no notion of "my" tenant, and tags are not an authorization
+// boundary).
+//
+// This includes every backup point that exists, regardless of the fork's
+// own internal merge/assist/preview classification - deliberately, and
+// unlike the fork's CLI, which has never displayed an assist or preview
+// base. From this package's point of view a backup point is "real" the
+// moment Backup's caller sees its tags (BackupPoint.Tags carries
+// whatever the fork classified it as, in the "backup-type" key, same as
+// any other tag), whether or not the fork's own base-selection logic
+// later folds it into another backup: a recoverable error partway
+// through a real backup is enough to leave one tagged assist, still
+// genuinely yours, still genuinely occupying storage, and this method is
+// how a caller finds out it is there. A future browse/restore chunk
+// should keep this in mind: not every listed point is necessarily a
+// complete, independently restorable backup the way a merge base is.
 func (r *Repository) ListBackupPoints(ctx context.Context, tags map[string]string) ([]BackupPoint, error) {
 	bs, err := r.backupsByTag(ctx, tags)
 	if err != nil {
@@ -161,23 +178,28 @@ func (r *Repository) ListBackupPoints(ctx context.Context, tags map[string]strin
 
 // DeleteBackupPoints deletes every backup point carrying all the key/value
 // pairs in tags, and only those - never a point whose tags don't match
-// every one supplied. It returns the number of backup points deleted.
+// every one supplied, and never silently skipping one that does: see
+// ListBackupPoints' doc comment for why this also reaches assist/preview
+// bases a caller might otherwise never learn exist, let alone delete. It
+// returns the IDs of every backup point actually deleted, so a caller can
+// record exactly what happened (k3ep's AUD-1 audit event) without a
+// separate, racy list-then-delete round trip.
 //
 // tags must be non-empty: see ErrEmptyTagFilter. This is a deliberate
 // guard rail, not a limitation worked around elsewhere - there is no way
 // to delete "everything" through this function, by design.
-func (r *Repository) DeleteBackupPoints(ctx context.Context, tags map[string]string) (int, error) {
+func (r *Repository) DeleteBackupPoints(ctx context.Context, tags map[string]string) ([]string, error) {
 	if len(tags) == 0 {
-		return 0, ErrEmptyTagFilter
+		return nil, ErrEmptyTagFilter
 	}
 
 	bs, err := r.backupsByTag(ctx, tags)
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
 
 	if len(bs) == 0 {
-		return 0, nil
+		return nil, nil
 	}
 
 	ids := make([]string, 0, len(bs))
@@ -187,12 +209,20 @@ func (r *Repository) DeleteBackupPoints(ctx context.Context, tags map[string]str
 	}
 
 	if err := r.repo.DeleteBackups(ctx, true, ids...); err != nil {
-		return 0, fmt.Errorf("engine: deleting backup points: %w", err)
+		return nil, fmt.Errorf("engine: deleting backup points: %w", err)
 	}
 
-	return len(ids), nil
+	return ids, nil
 }
 
+// backupsByTag lists through AllBackupsByTag, not pkg/repository's
+// BackupsByTag: the latter silently drops any backup tagged
+// model.AssistBackup, which hid real, caller-tagged content from both
+// ListBackupPoints and DeleteBackupPoints before this was found and
+// fixed in review. See AllBackupsByTag's own doc comment in
+// pkg/repository/backups.go for exactly how an assist base gets created
+// and why that makes it this package's content too, not an internal
+// implementation detail safe to filter out.
 func (r *Repository) backupsByTag(ctx context.Context, tags map[string]string) ([]*backup.Backup, error) {
 	var opts []store.FilterOption
 
@@ -200,7 +230,7 @@ func (r *Repository) backupsByTag(ctx context.Context, tags map[string]string) (
 		opts = append(opts, store.Tags(tags))
 	}
 
-	bs, err := r.repo.BackupsByTag(ctx, opts...)
+	bs, err := r.repo.AllBackupsByTag(ctx, opts...)
 	if err != nil {
 		return nil, fmt.Errorf("engine: listing backup points: %w", err)
 	}

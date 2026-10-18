@@ -197,13 +197,13 @@ func TestDeleteBackupPoints_RejectsEmptyTags(t *testing.T) {
 
 	r := &Repository{}
 
-	n, err := r.DeleteBackupPoints(ctx, nil)
+	ids, err := r.DeleteBackupPoints(ctx, nil)
 	require.Error(t, err)
 	assert.ErrorIs(t, err, ErrEmptyTagFilter)
-	assert.Equal(t, 0, n)
+	assert.Empty(t, ids)
 
-	n, err = r.DeleteBackupPoints(ctx, map[string]string{})
+	ids, err = r.DeleteBackupPoints(ctx, map[string]string{})
 	require.Error(t, err)
 	assert.ErrorIs(t, err, ErrEmptyTagFilter)
-	assert.Equal(t, 0, n)
+	assert.Empty(t, ids)
 }

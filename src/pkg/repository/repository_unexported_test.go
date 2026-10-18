@@ -322,6 +322,52 @@ func (suite *RepositoryBackupsUnitSuite) TestBackupsByTag() {
 	}
 }
 
+// TestAllBackupsByTag_IncludesAssistBackups proves this chunk's review
+// fix: allBackupsByTag (AllBackupsByTag's testable core, pkg/engine's
+// ListBackupPoints/DeleteBackupPoints use the method) returns every
+// backup GetBackups hands it, assist and preview bases included, unlike
+// backupsByTag above, which drops anything tagged model.AssistBackup.
+// Content in an assist base created by a recoverable error during a real
+// pkg/engine.Backup call was otherwise listable and deletable nowhere.
+func (suite *RepositoryBackupsUnitSuite) TestAllBackupsByTag_IncludesAssistBackups() {
+	merge := &backup.Backup{
+		BaseModel: model.BaseModel{
+			ID: model.StableID(uuid.NewString()),
+			Tags: map[string]string{
+				model.BackupTypeTag: model.MergeBackup,
+			},
+		},
+	}
+	assist := &backup.Backup{
+		BaseModel: model.BaseModel{
+			ID: model.StableID(uuid.NewString()),
+			Tags: map[string]string{
+				model.BackupTypeTag: model.AssistBackup,
+			},
+		},
+	}
+
+	t := suite.T()
+
+	ctx, flush := tester.NewContext(t)
+	defer flush()
+
+	mbl := mockBackupList{backups: []*backup.Backup{merge, assist}}
+
+	// backupsByTag (the pre-existing, CLI-facing function) still drops the
+	// assist backup - unchanged behavior, asserted here as the baseline
+	// allBackupsByTag below is contrasted against.
+	filtered, err := backupsByTag(ctx, mbl, nil)
+	require.NoError(t, err, clues.ToCore(err))
+	assert.ElementsMatch(t, []*backup.Backup{merge}, filtered)
+
+	// allBackupsByTag - what AllBackupsByTag, and so pkg/engine, actually
+	// uses - returns both.
+	all, err := allBackupsByTag(ctx, mbl, nil)
+	require.NoError(t, err, clues.ToCore(err))
+	assert.ElementsMatch(t, []*backup.Backup{merge, assist}, all)
+}
+
 type getRes struct {
 	bup *backup.Backup
 	err error

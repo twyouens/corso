@@ -23,6 +23,54 @@ var ErrRepositoryExists = errors.New("engine: a repository already exists with t
 // RepositoryConfig is everything OpenRepository and InitializeRepository
 // need. The caller supplies every field explicitly; this package never
 // reads an environment variable, config file or flag to fill one in.
+//
+// Trust model: this package trusts RepositoryConfig completely and
+// enforces almost nothing about where Storage points or what Account
+// authenticates as (beyond ErrMissingStorageCredentials below) - it
+// cannot know, and does not try to guess, whether a given value is
+// correct for the caller's own tenant. Concretely, and by review: this
+// package gives a caller holding (or guessing) a storage location and key
+// an existence-and-key oracle (its errors distinguish "wrong password"
+// from "not initialized"), an arbitrary-write primitive at any filesystem
+// path the caller can reach (InitializeRepository creates it, files
+// included, if nothing is there yet), and an unvalidated outbound
+// connection to any S3-compatible endpoint it is given, including an
+// internal or loopback address, with the responder's own error body
+// reflected back. None of that is a bug in this package to fix - it is
+// the direct consequence of "the caller supplies everything" (REPO-3),
+// which k3ep needs to open its own tenants' own repositories. It is k3ep's
+// obligation, not this package's, to derive Storage's location and
+// credentials and Account's identity entirely server-side, before a
+// tenant-influenced value could ever reach this struct's fields.
+//
+// Tags are not an authorization boundary either: a single Repository
+// handle (and the storage location/key behind it) must hold exactly one
+// tenant's data for tag-based filtering (BackupRequest.Tags,
+// ListBackupPoints, DeleteBackupPoints) to be a meaningful boundary at
+// all. This package enforces the matching logic correctly - see
+// store.Tags and BackupOperation.AdditionalTags - but has no concept of
+// "my tenant" to check tags against; that separation is k3ep's to keep by
+// construction (one repository per tenant), not something a tag value can
+// create on its own.
+//
+// Never log, print or format a RepositoryConfig (or a Storage or Account
+// value) with the standard library's default formatting: Storage and
+// Account each carry a credential (the repository's own encryption key,
+// and the Microsoft 365 application's client secret) in a
+// map[string]string field with no special treatment from fmt. This type's
+// String, GoString and LogValue methods (redact.go) exist exactly to make
+// %v/%+v/%#v/%s and slog logging safe; nothing else here does. Separately,
+// and by design of the fork underneath this package rather than anything
+// pkg/engine adds: with no logger configured, the fork's own singleton
+// logger writes info-level logs to the process user's home directory, and
+// clues.Hide(...)-wrapped values (such as a tenant or resource owner ID
+// this package's own ctx-building does not add, but the fork's lower
+// layers do) go out in plaintext unless the caller's own logging setup
+// configures PII hashing. This package cannot change that default without
+// changing the CLI's own logging behavior, which is out of scope here;
+// k3ep must configure its own logger and PII handling before relying on
+// this package in a context subject to retention or access-control
+// requirements.
 type RepositoryConfig struct {
 	// Storage names the repository's storage destination - a mounted
 	// filesystem path or an S3-compatible bucket (for example MinIO) -
@@ -33,6 +81,11 @@ type RepositoryConfig struct {
 	// means losing the repository; k3ep's own key management (wrapping it
 	// with a platform master key, ENC-1) happens entirely above this
 	// package.
+	//
+	// For S3-compatible storage, AccessKey and SecretKey are required:
+	// this package rejects an S3 Storage with either empty outright (see
+	// ErrMissingStorageCredentials) rather than letting Kopia fall
+	// through to the platform's own ambient AWS identity.
 	Storage storage.Storage
 
 	// Account carries the Microsoft 365 application credentials this
@@ -135,6 +188,12 @@ func OpenRepository(ctx context.Context, cfg RepositoryConfig) (*Repository, err
 }
 
 func newRepo(ctx context.Context, cfg RepositoryConfig, repoID string) (repository.Repositoryer, *count.Bus, error) {
+	if err := validateStorageCredentials(cfg.Storage); err != nil {
+		return nil, nil, err
+	}
+
+	ensureConcurrencyLimiterInitialized(ctx, cfg.Options)
+
 	repo, err := repository.New(
 		ctx,
 		cfg.Account,
