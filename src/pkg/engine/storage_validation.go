@@ -1,13 +1,10 @@
 package engine
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"strings"
 
-	"github.com/twyouens/corso/src/pkg/control"
-	"github.com/twyouens/corso/src/pkg/services/m365/api/graph"
 	"github.com/twyouens/corso/src/pkg/storage"
 )
 
@@ -89,61 +86,4 @@ func validateStorageCredentials(st storage.Storage) error {
 	}
 
 	return nil
-}
-
-// ensureConcurrencyLimiterInitialized calls the fork's own
-// graph.InitializeConcurrencyLimiter with a value this package controls,
-// before repository.New ever gets a chance to connect a Microsoft 365
-// data provider and make that call itself with a service this package
-// cannot yet know (see InitializeRepository's and OpenRepository's doc
-// comments: both connect a provider for path.UnknownService, since no
-// backup has chosen a real service yet).
-//
-// graph.InitializeConcurrencyLimiter is a sync.Once: whichever of this
-// function's call or m365.NewController's internal call runs first, for
-// the lifetime of the process, decides whether every Exchange Graph call
-// afterwards gets the item-fetch concurrency limiter at all.
-// m365.NewController passes enable = (service == path.ExchangeService),
-// so path.UnknownService - and so, without this function, every
-// InitializeRepository/OpenRepository call - would permanently disable
-// the limiter for the whole process the moment it ran first, silently
-// removing Exchange's only concurrency guard for every later backup this
-// process ever runs, Exchange or not, k3ep's long-lived-worker shape
-// included. Calling this first, always with enable=true, means the
-// decision this package controls is "the limiter exists", which is
-// correct for Exchange.
-//
-// This is not a free or neutral choice for every other service, and an
-// earlier version of this comment called it "harmless" and "inert" -
-// measured and found false. concurrencyLimiterMiddleware is a single,
-// process-global semaphore, shared across every service and every
-// concurrent backup this process runs, not a per-client or per-tenant
-// one; it is not configurable per call once latched, since it is exactly
-// the same sync.Once this function is racing to win correctly. Measured
-// against 24 concurrent plain Users().GetByID-shaped Graph calls: ~400ms
-// with the limiter forced off, ~745ms clamped to 4 in-flight requests,
-// ~1.647s clamped to 1. A worker process backing up many tenants
-// concurrently pays this clamp on every service, all the time, as the
-// cost of this function's fix for Exchange - and the first repository
-// ever opened in the process is what decides the clamp's width for every
-// later one, including an open that goes on to fail Microsoft 365
-// authentication entirely. The user has approved a separate, later chunk
-// to replace this process-global singleton with a per-client limiter;
-// this function deliberately does not attempt that here, and nothing in
-// it should be read as implying the current cost is acceptable long
-// term, only accurately described.
-//
-// capacity falls back to control.DefaultOptions()'s value if opts.Parallelism.ItemFetch
-// is not positive: a capacity of 0 would create a semaphore every request
-// blocks on forever, and callers who only override other control.Options
-// fields and never touch Parallelism (including every example and test in
-// this fork's history prior to this check existing) must not be handed
-// exactly that by a zero-value control.Options{}.
-func ensureConcurrencyLimiterInitialized(ctx context.Context, opts control.Options) {
-	capacity := opts.Parallelism.ItemFetch
-	if capacity <= 0 {
-		capacity = control.DefaultOptions().Parallelism.ItemFetch
-	}
-
-	graph.InitializeConcurrencyLimiter(ctx, true, capacity)
 }

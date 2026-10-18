@@ -19,7 +19,6 @@ import (
 	"github.com/twyouens/corso/src/pkg/errs/core"
 	"github.com/twyouens/corso/src/pkg/path"
 	"github.com/twyouens/corso/src/pkg/services/m365/api"
-	"github.com/twyouens/corso/src/pkg/services/m365/api/graph"
 )
 
 var ErrNoResourceLookup = clues.New("missing resource lookup client")
@@ -110,8 +109,6 @@ func NewController(
 	co control.Options,
 	counter *count.Bus,
 ) (*Controller, error) {
-	graph.InitializeConcurrencyLimiter(ctx, pst == path.ExchangeService, co.Parallelism.ItemFetch)
-
 	creds, err := acct.M365Config()
 	if err != nil {
 		return nil, clues.WrapWC(ctx, err, "retrieving m365 account configuration")

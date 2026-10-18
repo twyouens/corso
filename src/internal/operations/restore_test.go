@@ -28,7 +28,6 @@ import (
 	"github.com/twyouens/corso/src/pkg/count"
 	"github.com/twyouens/corso/src/pkg/dttm"
 	"github.com/twyouens/corso/src/pkg/selectors"
-	"github.com/twyouens/corso/src/pkg/services/m365/api/graph"
 	storeTD "github.com/twyouens/corso/src/pkg/storage/testdata"
 	"github.com/twyouens/corso/src/pkg/store"
 )
@@ -230,8 +229,6 @@ func (suite *RestoreOpIntegrationSuite) SetupSuite() {
 
 	ctx, flush := tester.NewContext(t)
 	defer flush()
-
-	graph.InitializeConcurrencyLimiter(ctx, true, 4)
 
 	var (
 		st           = storeTD.NewPrefixedS3Storage(t)

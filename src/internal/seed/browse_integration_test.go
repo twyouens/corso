@@ -21,7 +21,6 @@ import (
 	"github.com/twyouens/corso/src/pkg/engine"
 	"github.com/twyouens/corso/src/pkg/selectors"
 	"github.com/twyouens/corso/src/pkg/services/m365/api"
-	"github.com/twyouens/corso/src/pkg/services/m365/api/graph"
 )
 
 // This file is chunk 0.7's live proof of pkg/engine's browse API against
@@ -219,7 +218,6 @@ func (suite *BrowseIntegrationSuite) TestBrowse_SeededObjectMatchesManifest() {
 	// Required for this test to pass standalone, not just as part of the
 	// whole ./internal/seed/... suite - see engine_integration_test.go's
 	// identical call for the full explanation.
-	graph.InitializeConcurrencyLimiter(ctx, true, 4)
 
 	manifestPath := filepath.Join(t.TempDir(), "seed-manifest.json")
 	cfg := engineTestConfig(t, manifestPath)

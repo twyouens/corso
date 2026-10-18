@@ -16,7 +16,6 @@ import (
 	"github.com/twyouens/corso/src/pkg/count"
 	"github.com/twyouens/corso/src/pkg/credentials"
 	"github.com/twyouens/corso/src/pkg/services/m365/api"
-	"github.com/twyouens/corso/src/pkg/services/m365/api/graph"
 )
 
 // This is the harness's one integration smoke test (Done-when #5): it
@@ -62,8 +61,6 @@ func (suite *SeedHarnessIntgSuite) TestRun_SeedsTenantAndIsIdempotent() {
 
 	ctx, flush := tester.NewContext(t)
 	defer flush()
-
-	graph.InitializeConcurrencyLimiter(ctx, true, 4)
 
 	cfg := Config{
 		TenantID:     os.Getenv(EnvTenantID),

@@ -497,11 +497,6 @@ func TestBackupIntgSuite(t *testing.T) {
 func (suite *BackupIntgSuite) SetupSuite() {
 	t := suite.T()
 	suite.m365 = its.GetM365(t)
-
-	ctx, flush := tester.NewContext(t)
-	defer flush()
-
-	graph.InitializeConcurrencyLimiter(ctx, true, 4)
 }
 
 func (suite *BackupIntgSuite) TestMailFetch() {

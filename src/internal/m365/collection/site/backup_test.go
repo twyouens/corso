@@ -345,11 +345,6 @@ func TestSharePointSuite(t *testing.T) {
 func (suite *SharePointBackupIntgSuite) SetupSuite() {
 	t := suite.T()
 	suite.m365 = its.GetM365(t)
-
-	ctx, flush := tester.NewContext(t)
-	defer flush()
-
-	graph.InitializeConcurrencyLimiter(ctx, false, 4)
 }
 
 func (suite *SharePointBackupIntgSuite) TestCollectPages() {

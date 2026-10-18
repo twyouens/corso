@@ -10,7 +10,6 @@ import (
 	"github.com/twyouens/corso/src/pkg/account"
 	"github.com/twyouens/corso/src/pkg/control"
 	"github.com/twyouens/corso/src/pkg/count"
-	"github.com/twyouens/corso/src/pkg/path"
 	"github.com/twyouens/corso/src/pkg/services/m365/api/graph"
 )
 
@@ -53,12 +52,25 @@ func NewClient(
 	counter *count.Bus,
 	opts ...graph.Option,
 ) (Client, error) {
+	// The Graph concurrency limiter's capacity is a property of the clients
+	// built here, taken from the parallelism this caller asked for in its own
+	// control.Options.  It is prepended rather than appended so an explicit
+	// graph.ConcurrencyLimit in opts still wins: options are applied in order.
+	//
+	// Nothing process-global is involved.  Two api.Clients built in one
+	// process - two repositories, two tenants, two concurrent backups - each
+	// get their own semaphore at their own capacity, and a client that fails
+	// to build sets nothing for the clients built after it.
+	opts = append(
+		[]graph.Option{graph.ConcurrencyLimit(co.Parallelism.ItemFetch)},
+		opts...)
+
 	s, err := NewService(creds, counter, opts...)
 	if err != nil {
 		return Client{}, err
 	}
 
-	li, err := newLargeItemService(creds, counter)
+	li, err := newLargeItemService(creds, counter, opts...)
 	if err != nil {
 		return Client{}, err
 	}
@@ -68,6 +80,12 @@ func NewClient(
 		return Client{}, clues.Wrap(err, "generating azure authorizer")
 	}
 
+	// The Requester runs on graph.NewHTTPWrapper's own middleware chain
+	// (graph.internalMiddleware), which has never carried a concurrency
+	// limiter - upstream included - so graph.ConcurrencyLimit is deliberately
+	// not passed here rather than passed and silently ignored.  Bounding
+	// arbitrary-URL and large-item content downloads is a throughput decision
+	// this chunk does not make; see internalMiddleware's comment.
 	rqr := graph.NewNoTimeoutHTTPWrapper(
 		counter,
 		graph.AuthorizeRequester(azureAuth))
@@ -86,14 +104,6 @@ func NewClient(
 	}
 
 	return cli, nil
-}
-
-// initConcurrencyLimit ensures that the graph concurrency limiter is
-// initialized, so that calls do not step over graph api's service limits.
-// Limits are derived from the provided servie type.
-// Callers will need to call this func before making api calls an api client.
-func InitConcurrencyLimit(ctx context.Context, pst path.ServiceType) {
-	graph.InitializeConcurrencyLimiter(ctx, pst == path.ExchangeService, 4)
 }
 
 // Service generates a new graph servicer.  New servicers are used for paged
@@ -129,8 +139,31 @@ func NewService(
 func newLargeItemService(
 	creds account.M365Config,
 	counter *count.Bus,
+	opts ...graph.Option,
 ) (*graph.Service, error) {
-	a, err := NewService(creds, counter, graph.NoTimeout())
+	// Every option the caller gave NewClient is forwarded here, not just the
+	// concurrency limit, so an api.Client's two kiota services agree on
+	// retries, backoff and capacity instead of only the first one honouring
+	// them. Before this chunk, newLargeItemService took no options at all and
+	// silently dropped its caller's; narrowing it to the concurrency option
+	// alone would instead mean an explicit graph.ConcurrencyLimit applied to
+	// Stable and not to LargeItem - reintroducing, inside a single
+	// api.Client, exactly the "two clients disagree about capacity" split
+	// this chunk exists to remove. Client.Service() and NewService already
+	// forward options; this was the one constructor that did not.
+	//
+	// NoTimeout() is appended *last* and so always wins: a caller cannot take
+	// the no-timeout property away from the large-item client, which is the
+	// only reason that client exists. Pinned by graph's
+	// TestPopulateConfig_LastOptionWins.
+	//
+	// A fresh slice, not append(opts, ...), so this call can never write into
+	// spare capacity in its caller's own opts backing array.
+	liOpts := make([]graph.Option, 0, len(opts)+1)
+	liOpts = append(liOpts, opts...)
+	liOpts = append(liOpts, graph.NoTimeout())
+
+	a, err := NewService(creds, counter, liOpts...)
 	return a, clues.Wrap(err, "generating no-timeout graph adapter").OrNil()
 }
 

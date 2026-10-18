@@ -192,8 +192,12 @@ func newRepo(ctx context.Context, cfg RepositoryConfig, repoID string) (reposito
 		return nil, nil, err
 	}
 
-	ensureConcurrencyLimiterInitialized(ctx, cfg.Options)
-
+	// No process-global Graph setup happens here.  The Graph concurrency
+	// limiter's capacity is a property of each Graph client, derived from
+	// cfg.Options.Parallelism.ItemFetch as it flows through repository.New to
+	// m365.NewController and api.NewClient, so two repositories opened in one
+	// process - two tenants, two concurrent backups - get independent
+	// limiters at their own capacities.  See README.md section 4.6.
 	repo, err := repository.New(
 		ctx,
 		cfg.Account,

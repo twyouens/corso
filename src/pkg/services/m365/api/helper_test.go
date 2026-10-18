@@ -89,8 +89,6 @@ func newIntegrationTesterSetup(t *testing.T) intgTesterSetup {
 	ctx, flush := tester.NewContext(t)
 	defer flush()
 
-	graph.InitializeConcurrencyLimiter(ctx, true, 4)
-
 	a := tconfig.NewM365Account(t)
 	creds, err := a.M365Config()
 	require.NoError(t, err, clues.ToCore(err))

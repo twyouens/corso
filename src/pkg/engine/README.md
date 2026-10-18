@@ -572,36 +572,62 @@ report the gap. `res.Items` holds every match from the points that *were*
 readable; that is still useful, as long as nobody mistakes it for the whole
 answer.
 
-### 4.6 Opening a repository installs a process-global Graph concurrency clamp
+### 4.6 Graph concurrency is per client, at most four in flight, and never shared
 
-`InitializeRepository` and `OpenRepository` call the fork's
-`graph.InitializeConcurrencyLimiter`, which is a `sync.Once`. Measured
-consequences:
+Every Microsoft Graph client this engine builds carries its own concurrency
+limiter. The capacity is a property of that client, taken from the
+`RepositoryConfig.Options.Parallelism.ItemFetch` its caller passed, and
+clamped to **1-4** in-flight requests: a value below 1 or above 4 becomes 4,
+and `control.DefaultOptions()` is 4.
 
-- The limiter is **one process-global semaphore**, shared by every Microsoft
-  365 service, every tenant and every concurrent backup in the process. It is
-  not per client, per tenant or per call.
-- Its width comes from `RepositoryConfig.Options.Parallelism.ItemFetch`,
-  clamped to **1–4** in-flight requests: a value below 1 or above 4 becomes 4,
-  and `control.DefaultOptions()` is 4.
-- **The first repository opened in the process latches it for the process's
-  lifetime** — including an open that then fails Microsoft 365 authentication
-  entirely. Later opens with different options change nothing.
-- The cost is real, not theoretical: 24 concurrent Graph calls took ~400 ms
-  with the limiter off, ~745 ms clamped to 4, ~1.647 s clamped to 1.
+- **Two repositories opened in one process do not interfere.** Each gets its
+  own semaphore at its own capacity. Opening repository A with
+  `ItemFetch: 1` does not narrow repository B opened afterwards with
+  `ItemFetch: 4`, in either order, and an open that fails - including one
+  that fails Microsoft 365 authentication - sets nothing for a later,
+  successful one.
+- **A limiter is always installed.** There is no option set, and no code path,
+  that produces a Graph client without one; a client built with no options at
+  all is bounded at 4.
+- **"Client" is not "repository", and the difference is a factor of two.** One
+  repository builds **two** limited Graph clients, each with its own semaphore
+  at the capacity above: `Stable`, which carries metadata and enumeration
+  calls, and `LargeItem`, which carries mail and event attachments and drive
+  item content. So one repository at `ItemFetch: 4` has an in-flight ceiling of
+  **4 metadata plus 4 large-item requests, not 4 in total** - and the
+  Requester, a third client used for arbitrary URLs and large content
+  downloads, is not limited at all (below). Size a worker from 8 per
+  repository, not 4.
+- **A process's total in-flight Graph requests therefore scale with the number
+  of repositories**, not with a single process-wide ceiling: N tenants backing
+  up concurrently get 2N independent limiters. The engine does not, and cannot,
+  cap the process total.
 
-The engine takes this on deliberately, because the alternative was worse: the
-fork's own code disables the limiter entirely for a non-Exchange service, and
-whichever call wins the `sync.Once` decides for everything afterwards. If
-anything in the process calls `api.InitConcurrencyLimit` for a non-Exchange
-service *first*, every Graph client in that process ends up with no limiter at
-all.
+What k3ep must do: size a worker by goroutine, not by process; treat
+`Options.Parallelism.ItemFetch` as a per-repository setting that takes effect
+for that repository; and when planning capacity, count **two** limiters of
+that width per open repository plus an unlimited content-download client, not
+one. Do not assume a process-wide ceiling exists, because none does - if a worker needs to bound its own total Graph pressure across
+many tenants, that bound belongs in k3ep, above this API.
 
-What k3ep must do: assume one worker process shares one clamp of at most four
-in-flight Graph requests across all of its tenants, and size workers by process
-rather than by goroutine until a per-client limiter lands (a separate, approved
-chunk). Do not expect `Options.Parallelism` on a later `OpenRepository` to
-widen it.
+Two limits this does **not** change, both of which remain process-wide and
+neither of which this engine exposes:
+
+- The **per-minute rate limiters** in the fork's Graph middleware (a token
+  bucket per service, and a sliding window for Exchange) are package-level
+  and shared by every client in the process. They bound the request *rate*,
+  not simultaneity, which is why widening concurrency per client does not
+  widen the rate at which this process can hit Graph.
+- The **Requester** - the client that fetches arbitrary URLs and large item
+  content - has never carried a concurrency limiter, upstream included, and
+  still does not. Content downloads are bounded by the rate limiter and by
+  the collection layer's own `ItemFetch` worker pools, not by a semaphore.
+
+(Earlier drafts of this guide, and the engine code itself, described a
+single process-global clamp latched by the first repository opened in the
+process. That was accurate for v0.1.0 and is no longer accurate: the
+singleton, its `sync.Once`, `graph.InitializeConcurrencyLimiter` and
+`api.InitConcurrencyLimit` are all gone.)
 
 ### 4.7 S3 requires explicit credentials; there is no fallback path
 
@@ -768,12 +794,17 @@ but if k3ep does not supply a value, no default rescues it.
 - **No item-level erasure or snapshot rewriting.** Deleting a whole backup
   point by tag is all that exists today.
 - **No row-level SharePoint list handling** (item 10).
+- **No process-wide Graph concurrency ceiling.** v0.1.0 had one, by accident: a
+  single process-global clamp of at most four in-flight Graph requests, latched
+  by the first repository opened. That is gone as of the next release - see
+  item 6 - and nothing replaced it, because per-client limiters are the right
+  shape and a process-wide bound across tenants belongs in k3ep's scheduler,
+  not in a library that has no notion of a tenant.
 - **No full-text search.** Names only, and nothing in the browse API opens item
   content.
 - **No scheduling, no retention policy, no catalogue, no multi-tenancy.** The
   engine has no notion of a tenant, a policy, a schedule or a database. Tags
   are strings it stores for you.
-- **No per-client Graph concurrency control** (item 6).
 - **No ambient credential discovery of any kind** (items 7 and 11).
 - **No S3 `AssumeRole`**, and S3 TLS handshakes use Go's default 10-second
   timeout rather than the 60 seconds Alcion's Kopia fork used to force; current

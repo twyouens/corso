@@ -21,38 +21,51 @@ import (
 // "how many calls at one time"
 // ---------------------------------------------------------------------------
 
-// concurrencyLimiterMiddleware middleware limits the number of concurrent requests to graph API
+// concurrencyLimiterMiddleware limits the number of Graph requests that one
+// http client has in flight at the same time.
+//
+// One instance belongs to exactly one client: kiotaMiddlewares builds a fresh
+// one for every client it assembles, using that client's own clientConfig
+// (see clientConfig.concurrencyLimit and the ConcurrencyLimit option). There
+// is deliberately no package-level limiter and no sync.Once latch - the
+// capacity is a property of the client, derived from the options its caller
+// passed, so two repositories opened in one process with different
+// parallelism each get their own semaphore instead of sharing whichever one
+// the first caller in the process happened to create.
+//
+// TestGraphPackage_HasNoPackageLevelConcurrencyLimiterState enforces the
+// "no package-level state" half of that mechanically.
 type concurrencyLimiterMiddleware struct {
 	semaphore chan struct{}
 }
 
-var (
-	once                                sync.Once
-	concurrencyLimitMiddlewareSingleton = &concurrencyLimiterMiddleware{}
-	maxConcurrentRequests               = 4
-)
+// maxConcurrentRequests is the highest per-client capacity this package will
+// build a limiter with.  It is also the capacity a client gets when its caller
+// asks for something outside the supported range, including the zero value -
+// see clampConcurrencyLimit.
+const maxConcurrentRequests = 4
 
-func generateConcurrencyLimiter(capacity int) *concurrencyLimiterMiddleware {
+// clampConcurrencyLimit folds an arbitrary caller-supplied capacity into the
+// range this package supports.  A capacity below 1 would build a semaphore
+// every request blocks on forever; a capacity above maxConcurrentRequests
+// would exceed what Graph tolerates from one client.  Both become
+// maxConcurrentRequests.
+func clampConcurrencyLimit(capacity int) int {
 	if capacity < 1 || capacity > maxConcurrentRequests {
-		capacity = maxConcurrentRequests
+		return maxConcurrentRequests
 	}
 
-	return &concurrencyLimiterMiddleware{
-		semaphore: make(chan struct{}, capacity),
-	}
+	return capacity
 }
 
-func InitializeConcurrencyLimiter(ctx context.Context, enable bool, capacity int) {
-	once.Do(func() {
-		switch enable {
-		case true:
-			logger.Ctx(ctx).Infow("turning on the concurrency limiter", "concurrency_limit", capacity)
-			concurrencyLimitMiddlewareSingleton.semaphore = generateConcurrencyLimiter(capacity).semaphore
-		case false:
-			logger.Ctx(ctx).Info("turning off the concurrency limiter")
-			concurrencyLimitMiddlewareSingleton = nil
-		}
-	})
+// generateConcurrencyLimiter builds a limiter for a single client.  Callers
+// normally reach this through kiotaMiddlewares rather than directly; the
+// clamp is applied here as well as in the ConcurrencyLimit option so a direct
+// caller cannot produce a limiter nothing can pass through.
+func generateConcurrencyLimiter(capacity int) *concurrencyLimiterMiddleware {
+	return &concurrencyLimiterMiddleware{
+		semaphore: make(chan struct{}, clampConcurrencyLimit(capacity)),
+	}
 }
 
 func (cl *concurrencyLimiterMiddleware) Intercept(

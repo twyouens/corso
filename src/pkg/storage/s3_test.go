@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"reflect"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -339,6 +340,19 @@ func (suite *S3CfgUnitSuite) TestS3Config_ApplyConfigOverrides_RequiresExplicitC
 	})
 }
 
+// standaloneNumber builds a pattern matching n only where it stands on
+// its own as a number - delimited by the start or end of the string, or
+// by a character that is neither a letter nor a digit - rather than
+// wherever its digits happen to fall inside a longer alphanumeric run.
+//
+// It exists so "this error never reports a credential's length" can be
+// asserted against a rendered clues error without the assertion also
+// reacting to the error's random clues_trace. 38 inside 97cd382c is not
+// a report of a length; 38 in `length: 38` is.
+func standaloneNumber(n int) *regexp.Regexp {
+	return regexp.MustCompile(`(^|[^0-9A-Za-z])` + strconv.Itoa(n) + `([^0-9A-Za-z]|$)`)
+}
+
 // TestS3Config_Validate_RequiresCredentials_NoOptOut replaces chunk 0.6's
 // TestS3Config_Validate_RejectsBlankCredentialsByDefault, which asserted
 // a *default* and therefore also asserted that an opt-out existed. There
@@ -477,8 +491,41 @@ func (suite *S3CfgUnitSuite) TestS3Config_Validate_RequiresCredentials_NoOptOut(
 							"%s must never echo even a prefix of a credential value", name)
 					}
 
-					assert.NotContainsf(t, surface, strconv.Itoa(len(value)),
+					// The length must not appear as a number. Matched
+					// with a boundary rather than as a bare substring:
+					// a clues error carries a clues_trace of random hex,
+					// and "38" falls inside roughly one in five
+					// eight-hex-digit traces (97cd382c), so a substring
+					// search for the length reddened this test on ~17%
+					// of runs - 8 of 48 measured at ddd036ae, across six
+					// of its subtests - entirely independently of
+					// whether anything leaked. Every realistic leak
+					// shape is still caught, because a leaked length is
+					// delimited by punctuation or space in all of them:
+					// `len=38`, `"access_key_length": 38`,
+					// `length 38`. See the structural check below, which
+					// is what actually guarantees the typed case.
+					assert.NotRegexpf(t, standaloneNumber(len(value)), surface,
 						"%s must never report a credential's length", name)
+				}
+			}
+
+			// The structural half, and the stronger one: no value
+			// attached to the error may *be* a credential's length,
+			// whatever its Go type. This catches
+			// clues.With("access_key_length", 38) - an int, which no
+			// amount of string matching on a rendered error can
+			// distinguish from an incidental 38 - and it cannot collide
+			// with a random trace, because it compares whole values
+			// rather than searching inside them.
+			for _, value := range test.neverEchoes {
+				wantLen := strconv.Itoa(len(value))
+
+				for key, raw := range core.Values {
+					assert.NotEqualf(t, wantLen, fmt.Sprint(raw),
+						"core.Values[%q] must never report a credential's length", key)
+					assert.NotContainsf(t, key, value,
+						"a key in core.Values must never echo a credential value")
 				}
 			}
 

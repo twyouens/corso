@@ -35,9 +35,6 @@ func NewGockService(
 	counter *count.Bus,
 	opts ...Option,
 ) (*Service, error) {
-	// Need to initialize the concurrency limiter else we'll get an error.
-	InitializeConcurrencyLimiter(context.Background(), true, 4)
-
 	a, err := CreateGockAdapter(
 		creds.AzureTenantID,
 		creds.AzureClientID,

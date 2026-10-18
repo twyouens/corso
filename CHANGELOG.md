@@ -7,7 +7,94 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased] (beta)
 
-Nothing yet.
+### Changed
+
+- **The Microsoft Graph concurrency limiter is now per client, not per process.**
+  Its capacity is a property of each Graph client, derived from the
+  `control.Options.Parallelism.ItemFetch` that client's caller passed, and it is
+  installed unconditionally on every client `graph.KiotaHTTPClient` builds. Two
+  repositories opened in one process - two tenants, two concurrent backups - get
+  independent semaphores at their own capacities, in either creation order, and
+  an open that fails (including one that fails Microsoft 365 authentication
+  entirely) sets nothing for a later, successful one. Replaces the package-level
+  `concurrencyLimitMiddlewareSingleton` and its `sync.Once`, under which the
+  first caller in the process decided the capacity for every Graph client built
+  afterwards - measured at ~400 ms for 24 concurrent `users` calls with the
+  limiter off, ~745 ms clamped to 4 and ~1.647 s clamped to 1 - and under which
+  `graph/service.go` omitted the middleware entirely when the singleton was nil,
+  leaving every Graph client in the process with no limiter at all.
+  The clamp is unchanged: a capacity below 1 or above 4 becomes 4.
+  The per-service enablement upstream used (the limiter for Exchange only) is
+  deliberately not restored; it was a property of the latch, not a decision, and
+  every service's own item parallelism is already capped at 4 by
+  `graph.Parallelism`. The package-level per-minute rate limiters, which bound
+  request *rate* rather than simultaneity, are untouched, so this widens how many
+  Graph requests a process can have in flight at once but not how many it can
+  make per minute.
+- **`api.newLargeItemService` now forwards its caller's `graph.Option`s.** It
+  previously took none, so every option passed to `api.NewClient` applied to
+  `Client.Stable` and was silently dropped for `Client.LargeItem`. Kept
+  deliberately rather than narrowed to the concurrency option alone, because
+  narrowing would mean an explicit `graph.ConcurrencyLimit` applied to one of an
+  `api.Client`'s two services and not the other - reintroducing inside a single
+  client exactly the capacity disagreement this change exists to remove - and
+  because `Client.Service()` and `api.NewService` already forward options;
+  `newLargeItemService` was the only constructor that did not. `NoTimeout()` is
+  still appended last and so always wins, so a caller cannot take the
+  no-timeout property away from the large-item client; pinned by
+  `TestPopulateConfig_LastOptionWins`. No non-test caller in this fork passes
+  any `graph.Option` to `api.NewClient` today, so there is no behavioural
+  change in tree.
+- `pkg/engine`'s `InitializeRepository` and `OpenRepository` no longer perform any
+  process-global Graph setup. Their `Options.Parallelism.ItemFetch` now takes
+  effect for the repository it was passed for, rather than only for whichever
+  repository was opened first. No change to `pkg/engine`'s exported surface.
+  `src/pkg/engine/README.md` item 6 documented the old process-global clamp as a
+  known limitation and now documents the per-client behaviour instead, including
+  the two limits that remain process-wide (the rate limiters, and the Requester's
+  content-download chain, which carries no concurrency limiter and never has).
+
+### Removed
+
+- **Breaking, to this fork's own surface:** `graph.InitializeConcurrencyLimiter`
+  and `api.InitConcurrencyLimit` are removed rather than left as no-ops. Neither
+  has anything left to do once the capacity is per client, and a function named
+  `Initialize...` that silently does nothing is worse than its absence. Neither
+  is part of `pkg/engine`, the only package k3ep imports, so no k3ep code
+  changes. Callers that passed a capacity should pass
+  `control.Options.Parallelism.ItemFetch` to `api.NewClient` (which every call
+  site in this fork already did), or `graph.ConcurrencyLimit` directly.
+
+### Fixed
+
+- `pkg/storage`'s `TestS3Config_Validate_RequiresCredentials_NoOptOut` was flaky,
+  failing **8 of 48 runs** (~17%) across **six** of its subtests. Its "no
+  surface reports a credential's length" assertion searched a rendered `clues`
+  error for the bare substring `"38"`, the fixture credentials' length, while
+  every such error carries a `clues_trace` of random hex - and `38` falls inside
+  roughly one eight-hex-digit trace in five (`97cd382c`). The assertion's
+  *reach* is fixed, not its intent: the length must now not appear as a
+  standalone number (delimited by the string's ends or by a non-alphanumeric
+  character), and a new structural check additionally requires that no value
+  attached to the error *is* a credential's length whatever its Go type, which
+  catches `clues.With("secret_key_length", 38)` as an `int` - something no
+  substring search on a rendered error can distinguish from an incidental 38.
+  The test therefore proves strictly more than before. Verified across 1000
+  in-process runs and 40 separate processes with no failure, and against five
+  deliberate leaks (length as `int`, length as `string`, length inside prose,
+  whole credential value, 8-character prefix), each of which reddens the
+  assertion named for its shape.
+
+### Added
+
+- `graph.ConcurrencyLimit(capacity int)`, a `graph.Option` setting one client's
+  in-flight request capacity. `api.NewClient` prepends it from its caller's
+  options, so an explicit option still overrides the derived default.
+- A live test, `internal/seed`'s `TestPerClientConcurrencyIntegrationSuite`,
+  opening two repositories in one process with `Parallelism.ItemFetch` 1 and 4 -
+  narrow first, the order that used to latch - and running a real Microsoft 365
+  backup through each. The capacity-1 path was reachable under the old
+  process-global limiter but never deliberately exercised against real Graph.
 
 ## [v0.1.0] (beta) - 2026-10-18
 

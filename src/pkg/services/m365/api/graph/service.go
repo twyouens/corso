@@ -186,6 +186,19 @@ type clientConfig struct {
 	// does not get consumed by the standard graph client, which already comes
 	// packaged with an auth protocol.
 	requesterAuth authorizer
+	// concurrencyLimit is the number of Graph requests this client may have in
+	// flight at the same time.  Always a value clampConcurrencyLimit returned,
+	// so it is always between 1 and maxConcurrentRequests inclusive and is
+	// never zero, even for a clientConfig nobody passed options to.
+	concurrencyLimit int
+	// installedConcurrencyLimiter is the limiter kiotaMiddlewares actually
+	// built for this client, recorded so ConcurrencyLimit() can report the
+	// capacity of the semaphore requests really pass through rather than the
+	// capacity that was asked for.  Those two can only differ if something
+	// goes wrong, which is exactly why the reported value is taken from the
+	// installed limiter: a test that reads the requested value cannot tell
+	// whether the request was honoured.
+	installedConcurrencyLimiter *concurrencyLimiterMiddleware
 
 	appendMiddleware []khttp.Middleware
 }
@@ -199,6 +212,7 @@ func populateConfig(opts ...Option) *clientConfig {
 		maxRetries:           defaultMaxRetries,
 		minDelay:             defaultDelay,
 		timeout:              defaultHTTPClientTimeout,
+		concurrencyLimit:     maxConcurrentRequests,
 	}
 
 	for _, opt := range opts {
@@ -226,6 +240,26 @@ func NoTimeout() Option {
 func Timeout(timeout time.Duration) Option {
 	return func(c *clientConfig) {
 		c.timeout = timeout
+	}
+}
+
+// ConcurrencyLimit sets how many Graph requests the client being built may
+// have in flight at the same time.  The capacity belongs to that one client:
+// two clients built with different limits do not share a semaphore, and a
+// client built later in the process is never constrained by one built earlier.
+//
+// Values outside 1..maxConcurrentRequests, including the zero value, become
+// maxConcurrentRequests - see clampConcurrencyLimit.  A client built with no
+// options at all gets maxConcurrentRequests, so there is no way to construct a
+// Graph client with no concurrency limiter.
+//
+// api.NewClient sets this from its caller's
+// control.Options.Parallelism.ItemFetch, which is where the value k3ep or the
+// CLI chose actually enters.  Because options are applied in order, an opts
+// slice may override it afterwards.
+func ConcurrencyLimit(capacity int) Option {
+	return func(c *clientConfig) {
+		c.concurrencyLimit = clampConcurrencyLimit(capacity)
 	}
 }
 
@@ -317,10 +351,15 @@ func kiotaMiddlewares(
 		&LoggingMiddleware{},
 	}
 
-	// Optionally add concurrency limiter middleware if it has been initialized.
-	if concurrencyLimitMiddlewareSingleton != nil {
-		mw = append(mw, concurrencyLimitMiddlewareSingleton)
-	}
+	// Every client gets its own concurrency limiter, sized from its own
+	// config.  This is unconditional on purpose: there is no way to build a
+	// Graph client here without one, and no way for one client's capacity to
+	// decide another's.  populateConfig defaults concurrencyLimit to
+	// maxConcurrentRequests, so even a zero-value clientConfig produces a
+	// usable semaphore rather than a nil one.
+	limiter := generateConcurrencyLimiter(cc.concurrencyLimit)
+	cc.installedConcurrencyLimiter = limiter
+	mw = append(mw, limiter)
 
 	throttler := &throttlingMiddleware{
 		tf:      newTimedFence(),
@@ -372,6 +411,29 @@ func wrapAdapter(gra *msgraphsdkgo.GraphRequestAdapter, cc *clientConfig) *adapt
 		config:         cc,
 		retryDelay:     adapterRetryDelay,
 	}
+}
+
+// ConcurrencyLimit reports the number of Graph requests this adapter's client
+// may have in flight at the same time, read from the capacity of the
+// semaphore in the concurrency limiter kiotaMiddlewares installed for this
+// client and no other.  It is the installed capacity, not the requested one,
+// so a caller cannot be told the limit it asked for while requests pass
+// through a different - or shared, or absent - semaphore.  A client with no
+// limiter installed reports 0, which no clamped capacity ever is.
+//
+// adapterWrap is unexported, so this is only reachable by asserting the
+// abstractions.RequestAdapter returned by CreateAdapter (or held by a
+// graph.Service, or by api.Client.Stable/LargeItem) against a one-method
+// interface.  It exists so a caller - in practice a test - can confirm which
+// capacity a particular client was built with, which is the whole point of
+// the capacity being per client; nothing in this fork's non-test code reads
+// it.
+func (aw *adapterWrap) ConcurrencyLimit() int {
+	if aw.config == nil || aw.config.installedConcurrencyLimiter == nil {
+		return 0
+	}
+
+	return cap(aw.config.installedConcurrencyLimiter.semaphore)
 }
 
 // Graph may abruptly close connections, which we should retry.

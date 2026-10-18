@@ -9,7 +9,6 @@ import (
 	"github.com/twyouens/corso/src/pkg/control"
 	"github.com/twyouens/corso/src/pkg/count"
 	"github.com/twyouens/corso/src/pkg/fault"
-	"github.com/twyouens/corso/src/pkg/path"
 	"github.com/twyouens/corso/src/pkg/services/m365/api"
 	"github.com/twyouens/corso/src/pkg/services/m365/api/graph"
 )
@@ -44,9 +43,6 @@ func makeAC(
 	acct account.Account,
 	opts ...graph.Option,
 ) (api.Client, error) {
-	// exchange service inits a limit to concurrency.
-	api.InitConcurrencyLimit(ctx, path.ExchangeService)
-
 	creds, err := acct.M365Config()
 	if err != nil {
 		return api.Client{}, clues.WrapWC(ctx, err, "getting m365 account creds")

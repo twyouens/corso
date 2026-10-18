@@ -214,11 +214,6 @@ func TestOneDriveSuite(t *testing.T) {
 func (suite *OneDriveIntgSuite) SetupSuite() {
 	t := suite.T()
 
-	ctx, flush := tester.NewContext(t)
-	defer flush()
-
-	graph.InitializeConcurrencyLimiter(ctx, true, 4)
-
 	suite.userID = tconfig.SecondaryM365UserID(t)
 
 	acct := tconfig.NewM365Account(t)

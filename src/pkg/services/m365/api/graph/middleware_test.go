@@ -144,11 +144,6 @@ func (suite *RetryMWIntgSuite) SetupSuite() {
 		err error
 	)
 
-	ctx, flush := tester.NewContext(suite.T())
-	defer flush()
-
-	InitializeConcurrencyLimiter(ctx, false, -1)
-
 	suite.creds, err = a.M365Config()
 	require.NoError(suite.T(), err, clues.ToCore(err))
 }
