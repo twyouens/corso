@@ -44,6 +44,10 @@ type fakeRepo struct {
 	// from every GetBackupDetails call, so a test can exercise the
 	// not-found and read-error paths.
 	detailsFailure error
+	// detailsFailureByID fails the read for just those backup IDs,
+	// which is what FindItemsByName's skip-one-point-and-continue
+	// behaviour needs: one bad point among several good ones.
+	detailsFailureByID map[string]error
 	// detailsCalls counts GetBackupDetails calls, so a test can prove a
 	// backup point was (or was not) read.
 	detailsCalls int
@@ -62,6 +66,10 @@ func (f *fakeRepo) GetBackupDetails(
 
 	if f.detailsFailure != nil {
 		return nil, nil, errs.Fail(f.detailsFailure)
+	}
+
+	if err, ok := f.detailsFailureByID[backupID]; ok {
+		return nil, nil, errs.Fail(err)
 	}
 
 	var bup *backup.Backup

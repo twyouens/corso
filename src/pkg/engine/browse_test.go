@@ -696,6 +696,114 @@ func TestListItems_IDsAreStableAcrossSeparateCalls(t *testing.T) {
 		"a folder ID from an earlier call must still select that folder's items")
 }
 
+// TestListItems_DriveItemIDChangesWhenAnAncestorFolderIsRenamed pins the
+// limit Item.ID documents, which 5.1 and 7.3 will build on: a drive
+// item's storage path is built from its folder chain's DISPLAY NAMES, so
+// renaming (or moving) an ancestor gives the same file a different ID in
+// the next backup point.
+//
+// Not a defect to fix - it is the fork's own path scheme - but the
+// difference between "(point, ID) is the handle" and "ID is the handle",
+// and an earlier version of Item.ID's doc comment called the path
+// "immutable", which would have misled a caller into using the ID as a
+// cross-point primary key. Found in review.
+func TestListItems_DriveItemIDChangesWhenAnAncestorFolderIsRenamed(t *testing.T) {
+	ctx, flush := tester.NewContext(t)
+	defer flush()
+
+	// The same file, same item ID, same drive - only the containing
+	// folder's display name differs, exactly as a rename between two
+	// backups would leave it.
+	before := &details.Builder{}
+	addDriveFile(t, before, "file-001", "report.txt", 10, false, "Quarterlies")
+
+	after := &details.Builder{}
+	addDriveFile(t, after, "file-001", "report.txt", 10, false, "Quarterly Reports")
+
+	rBefore, idBefore, _ := repoWithDetails(t, before.Details(), model.MergeBackup)
+	rAfter, idAfter, _ := repoWithDetails(t, after.Details(), model.MergeBackup)
+
+	listBefore, err := rBefore.ListItems(ctx, ItemsRequest{BackupPointID: idBefore})
+	require.NoError(t, err)
+	require.Len(t, listBefore.Items, 1)
+
+	listAfter, err := rAfter.ListItems(ctx, ItemsRequest{BackupPointID: idAfter})
+	require.NoError(t, err)
+	require.Len(t, listAfter.Items, 1)
+
+	assert.Equal(t, listBefore.Items[0].Name, listAfter.Items[0].Name,
+		"this test is only meaningful if it is the same file either side")
+	assert.NotEqual(t, listBefore.Items[0].ID, listAfter.Items[0].ID,
+		"renaming a drive folder must be understood to change its items' IDs; "+
+			"if this now passes, Item.ID's documented contract is stronger than stated "+
+			"and should be re-read before 5.1 relies on it")
+}
+
+// TestListItems_ExchangeItemIDSurvivesAFolderRename is the other half of
+// that contract: Exchange storage paths use container IDs, not display
+// names, so renaming a mail folder leaves its items' IDs alone. Without
+// this case the test above would be consistent with "IDs are never
+// stable across points", which is not what the fork does and not what
+// Item.ID says.
+func TestListItems_ExchangeItemIDSurvivesAFolderRename(t *testing.T) {
+	ctx, flush := tester.NewContext(t)
+	defer flush()
+
+	// Same mailbox, same folder container ID, same message - only the
+	// folder's display name (its recorded location) differs.
+	build := func(folderDisplayName string) *details.Details {
+		b := &details.Builder{}
+
+		rr, err := path.Build(testTenant, testUser, path.ExchangeService, path.EmailCategory, true,
+			"mail-folder-container-id", "msg-001")
+		require.NoError(t, err)
+
+		require.NoError(t, b.Add(
+			rr,
+			path.Builder{}.Append(folderDisplayName),
+			details.ItemInfo{
+				Exchange: &details.ExchangeInfo{
+					ItemType: details.ExchangeMail,
+					Subject:  "quarterly report",
+					Size:     10,
+					Created:  mailCreated,
+					Modified: mailModified,
+				},
+			}))
+
+		return b.Details()
+	}
+
+	rBefore, idBefore, _ := repoWithDetails(t, build("Quarterlies"), model.MergeBackup)
+	rAfter, idAfter, _ := repoWithDetails(t, build("Quarterly Reports"), model.MergeBackup)
+
+	listBefore, err := rBefore.ListItems(ctx, ItemsRequest{BackupPointID: idBefore})
+	require.NoError(t, err)
+	require.Len(t, listBefore.Items, 1)
+
+	listAfter, err := rAfter.ListItems(ctx, ItemsRequest{BackupPointID: idAfter})
+	require.NoError(t, err)
+	require.Len(t, listAfter.Items, 1)
+
+	assert.Equal(t, listBefore.Items[0].ID, listAfter.Items[0].ID,
+		"renaming an Exchange mail folder must not change its items' IDs")
+
+	// The folder's own ID is likewise unchanged, while its reported name
+	// follows the rename - which is the point of keeping both.
+	treeBefore, err := rBefore.ListFolders(ctx, FolderTreeRequest{BackupPointID: idBefore})
+	require.NoError(t, err)
+
+	treeAfter, err := rAfter.ListFolders(ctx, FolderTreeRequest{BackupPointID: idAfter})
+	require.NoError(t, err)
+
+	require.Len(t, treeBefore.Folders, 1)
+	require.Len(t, treeAfter.Folders, 1)
+
+	assert.Equal(t, treeBefore.Folders[0].ID, treeAfter.Folders[0].ID)
+	assert.Equal(t, "Quarterlies", treeBefore.Folders[0].Name)
+	assert.Equal(t, "Quarterly Reports", treeAfter.Folders[0].Name)
+}
+
 // TestListItems_FilterByFolderIDIsDirectChildrenOnly proves the
 // FolderID filter returns the items directly in that folder and not its
 // subfolders', as ItemsRequest.FolderID documents.
@@ -888,8 +996,11 @@ func TestFindItemsByName_MatchesAndExcludesNonMatching(t *testing.T) {
 	found, err := r.FindItemsByName(ctx, FindItemsRequest{Tags: tags, Name: "quarterly report"})
 	require.NoError(t, err)
 
-	names := make([]string, 0, len(found))
-	for _, f := range found {
+	assert.Empty(t, found.UnreadableBackupPointIDs,
+		"every point in this fixture is readable, so none may be reported unreadable")
+
+	names := make([]string, 0, len(found.Items))
+	for _, f := range found.Items {
 		names = append(names, f.Item.Name)
 	}
 
@@ -901,7 +1012,7 @@ func TestFindItemsByName_MatchesAndExcludesNonMatching(t *testing.T) {
 
 	// Every hit must carry enough to act on: the point it came from, and
 	// a folder and ID a later restore can use.
-	for _, f := range found {
+	for _, f := range found.Items {
 		assert.NotEmpty(t, f.BackupPointID)
 		assert.Equal(t, BackupPointTypeMerge, f.BackupPointType)
 		assert.True(t, f.BackupPointIndependentlyRestorable)
@@ -913,7 +1024,7 @@ func TestFindItemsByName_MatchesAndExcludesNonMatching(t *testing.T) {
 	// A query matching nothing returns nothing, not everything.
 	none, err := r.FindItemsByName(ctx, FindItemsRequest{Tags: tags, Name: "no-such-item"})
 	require.NoError(t, err)
-	assert.Empty(t, none)
+	assert.Empty(t, none.Items)
 }
 
 // TestFindItemsByName_ExactModeExcludesSubstringMatches proves
@@ -936,8 +1047,8 @@ func TestFindItemsByName_ExactModeExcludesSubstringMatches(t *testing.T) {
 		Match: NameMatchExact,
 	})
 	require.NoError(t, err)
-	require.Len(t, exact, 1)
-	assert.Equal(t, "report", exact[0].Item.Name)
+	require.Len(t, exact.Items, 1)
+	assert.Equal(t, "report", exact.Items[0].Item.Name)
 
 	contains, err := r.FindItemsByName(ctx, FindItemsRequest{
 		Tags:  tags,
@@ -945,7 +1056,7 @@ func TestFindItemsByName_ExactModeExcludesSubstringMatches(t *testing.T) {
 		Match: NameMatchContains,
 	})
 	require.NoError(t, err)
-	assert.Len(t, contains, 2, "the zero value of Match must be substring matching")
+	assert.Len(t, contains.Items, 2, "the zero value of Match must be substring matching")
 }
 
 // TestFindItemsByName_IsCaseInsensitive covers NameMatch's documented
@@ -962,7 +1073,7 @@ func TestFindItemsByName_IsCaseInsensitive(t *testing.T) {
 
 	contains, err := r.FindItemsByName(ctx, FindItemsRequest{Tags: tags, Name: "QUARTERLY rep"})
 	require.NoError(t, err)
-	assert.Len(t, contains, 1)
+	assert.Len(t, contains.Items, 1)
 
 	exact, err := r.FindItemsByName(ctx, FindItemsRequest{
 		Tags:  tags,
@@ -970,7 +1081,7 @@ func TestFindItemsByName_IsCaseInsensitive(t *testing.T) {
 		Match: NameMatchExact,
 	})
 	require.NoError(t, err)
-	assert.Len(t, exact, 1)
+	assert.Len(t, exact.Items, 1)
 }
 
 // TestFindItemsByName_SkipsIncompletePointsUnlessAskedProves a find does
@@ -1024,9 +1135,11 @@ func TestFindItemsByName_SkipsIncompletePointsUnlessAsked(t *testing.T) {
 
 	byDefault, err := r.FindItemsByName(ctx, FindItemsRequest{Tags: tags, Name: "in the"})
 	require.NoError(t, err)
-	require.Len(t, byDefault, 1)
-	assert.Equal(t, "in the merge point", byDefault[0].Item.Name)
-	assert.Equal(t, mergeID, byDefault[0].BackupPointID)
+	require.Len(t, byDefault.Items, 1)
+	assert.Equal(t, "in the merge point", byDefault.Items[0].Item.Name)
+	assert.Equal(t, mergeID, byDefault.Items[0].BackupPointID)
+	assert.Empty(t, byDefault.UnreadableBackupPointIDs,
+		"a point skipped for being incomplete is not an unreadable point")
 	assert.Equal(t, 1, fr.detailsCalls,
 		"a skipped point's details manifest must not even be read")
 
@@ -1036,14 +1149,113 @@ func TestFindItemsByName_SkipsIncompletePointsUnlessAsked(t *testing.T) {
 		AllowIncompletePoints: true,
 	})
 	require.NoError(t, err)
-	require.Len(t, optedIn, 2)
+	require.Len(t, optedIn.Items, 2)
 
 	// Newest point first, as FindItemsByName documents.
-	assert.Equal(t, assistID, optedIn[0].BackupPointID)
-	assert.Equal(t, BackupPointTypeAssist, optedIn[0].BackupPointType)
-	assert.False(t, optedIn[0].BackupPointIndependentlyRestorable)
-	assert.Equal(t, mergeID, optedIn[1].BackupPointID)
-	assert.True(t, optedIn[1].BackupPointIndependentlyRestorable)
+	assert.Equal(t, assistID, optedIn.Items[0].BackupPointID)
+	assert.Equal(t, BackupPointTypeAssist, optedIn.Items[0].BackupPointType)
+	assert.False(t, optedIn.Items[0].BackupPointIndependentlyRestorable)
+	assert.Equal(t, mergeID, optedIn.Items[1].BackupPointID)
+	assert.True(t, optedIn.Items[1].BackupPointIndependentlyRestorable)
+}
+
+// TestFindItemsByName_UnreadablePointIsSkippedAndReported proves one bad
+// backup point does not make an object unsearchable.
+//
+// Found in review: FindItemsByName used to return the read error, so a
+// single point whose details could not be read - including the ordinary,
+// benign race where retention or a concurrent DeleteBackupPoints removes
+// a point between this call's own listing step and its read - failed the
+// whole search. An object with any one damaged point would have been
+// completely unsearchable, which for an erasure-verification or
+// legal-hold query is the worst possible failure mode: it looks like a
+// system error rather than a partial answer.
+//
+// Both halves matter and both are asserted: the matches from the
+// readable points still come back, AND the skipped point is named, so a
+// caller can tell "nothing matched" from "not everything was searched".
+func TestFindItemsByName_UnreadablePointIsSkippedAndReported(t *testing.T) {
+	ctx, flush := tester.NewContext(t)
+	defer flush()
+
+	goodB := &details.Builder{}
+	addMail(t, goodB, "k3ep-seed-mail", "msg-001", "quarterly report", 10)
+
+	otherGoodB := &details.Builder{}
+	addMail(t, otherGoodB, "k3ep-seed-mail", "msg-002", "quarterly report v2", 20)
+
+	badB := &details.Builder{}
+	addMail(t, badB, "k3ep-seed-mail", "msg-003", "quarterly report v3", 30)
+
+	goodID, badID, otherGoodID := uuid.NewString(), uuid.NewString(), uuid.NewString()
+	tags := map[string]string{"k3ep-object": testUser}
+
+	mergePoint := func(id string, age time.Duration) *backup.Backup {
+		return &backup.Backup{
+			BaseModel: model.BaseModel{
+				ID: model.StableID(id),
+				Tags: map[string]string{
+					model.BackupTypeTag: model.MergeBackup,
+					"k3ep-object":       testUser,
+				},
+			},
+			CreationTime: time.Now().UTC().Add(-age),
+			Version:      version.Backup,
+		}
+	}
+
+	// The unreadable point sits in the MIDDLE by age, so a search that
+	// aborted on it would also lose the oldest point's match - proving
+	// the loop continues rather than merely tolerating a failure at the
+	// end.
+	fr := &fakeRepo{
+		backups: []*backup.Backup{
+			mergePoint(otherGoodID, 0),
+			mergePoint(badID, time.Hour),
+			mergePoint(goodID, 2*time.Hour),
+		},
+		deets: map[string]*details.Details{
+			otherGoodID: otherGoodB.Details(),
+			badID:       badB.Details(),
+			goodID:      goodB.Details(),
+		},
+		detailsFailureByID: map[string]error{badID: assert.AnError},
+	}
+	r := &Repository{repo: fr}
+
+	found, err := r.FindItemsByName(ctx, FindItemsRequest{Tags: tags, Name: "quarterly report"})
+	require.NoError(t, err, "one unreadable point must not fail the whole search")
+
+	names := make([]string, 0, len(found.Items))
+	for _, f := range found.Items {
+		names = append(names, f.Item.Name)
+	}
+
+	assert.ElementsMatch(t, []string{"quarterly report v2", "quarterly report"}, names,
+		"matches from every readable point must still be returned")
+	assert.NotContains(t, names, "quarterly report v3",
+		"the unreadable point's items must not appear")
+
+	assert.Equal(t, []string{badID}, found.UnreadableBackupPointIDs,
+		"the skipped point must be named, or a partial result is indistinguishable from a complete one")
+
+	// A point missing entirely - deleted between the listing and the read
+	// - is the same case, and must behave the same way rather than
+	// surfacing as ErrBackupPointNotFound.
+	frDeleted := &fakeRepo{
+		backups: []*backup.Backup{mergePoint(goodID, 0), mergePoint(badID, time.Hour)},
+		deets:   map[string]*details.Details{goodID: goodB.Details()},
+	}
+	rDeleted := &Repository{repo: frDeleted}
+
+	afterDelete, err := rDeleted.FindItemsByName(ctx, FindItemsRequest{
+		Tags: tags,
+		Name: "quarterly report",
+	})
+	require.NoError(t, err, "a point deleted mid-search must not fail the search")
+	require.Len(t, afterDelete.Items, 1)
+	assert.Equal(t, "quarterly report", afterDelete.Items[0].Item.Name)
+	assert.Equal(t, []string{badID}, afterDelete.UnreadableBackupPointIDs)
 }
 
 // ---------------------------------------------------------------------------
@@ -1104,48 +1316,148 @@ func TestBrowse_UnknownBackupPointIsNotFound(t *testing.T) {
 // browse is the one chunk with a real incentive to break: its whole job
 // is names.
 //
-// The malformed entry below has a storage path browse cannot parse, so
-// every error path that carries entry context fires. The assertion is
-// that the resulting message carries the entry's opaque ID and none of
-// the names in the manifest. This test fails if any of browse's entry
-// errors is changed to interpolate a name - verified by adding the
-// display name to browseEntries' folder error.
+// browseEntries has exactly four error paths that carry entry context -
+// a folder's location, a folder's storage path, an item's location and
+// an item's storage path - and it returns on the first one, so a single
+// fixture can only ever reach one of them. An earlier version of this
+// test used one malformed *item* entry with a valid location and claimed
+// in its own comment that "every error path that carries entry context
+// fires", which was false: three of the four branches were unreachable,
+// and a name interpolated into any of them left this test green. Found
+// in review. Hence one case per branch below, each reaching its branch
+// and no other.
+//
+// Each case asserts the message carries the entry's opaque ID and none
+// of the three places a name could come from: the folder display name,
+// the location (which is itself a path of display names) and the item
+// name. The mutation matrix proving each case genuinely fires is
+// recorded in this chunk's result; every one of the eight mutations run
+// reddened exactly the case for its branch.
 func TestBrowse_ErrorsNeverNameAnItem(t *testing.T) {
 	ctx, flush := tester.NewContext(t)
 	defer flush()
 
-	// A details manifest holding an entry whose RepoRef is not a valid
-	// data-layer path. Built by hand because details.Builder would
-	// rightly refuse to create it.
-	deets := &details.Details{
-		DetailsModel: details.DetailsModel{
-			Entries: []details.Entry{
-				{
-					RepoRef:     "not/a/data/layer/path/at-all/really",
-					ShortRef:    "abcdef123456",
-					LocationRef: "k3ep-seed-mail",
-					ItemInfo: details.ItemInfo{
-						Exchange: &details.ExchangeInfo{
-							ItemType: details.ExchangeMail,
-							Subject:  "a-very-secret-subject-line",
-						},
-					},
-				},
+	// A location that cannot be unescaped: a backslash followed by a
+	// character that is not a valid escape. The fork's own error for it
+	// ("bad escape sequence in path") does not quote the input, so a leak
+	// here could only come from browse's own formatting - which is
+	// exactly what is under test.
+	const (
+		badLocation   = `secret-parent-folder\qsecret`
+		goodLocation  = "secret-location-folder"
+		secretFolder  = "a-very-secret-folder-name"
+		secretSubject = "a-very-secret-subject-line"
+		badRepoRef    = "not/a/data/layer/path/at-all/really"
+		shortRef      = "abcdef123456"
+	)
+
+	goodFolderRepoRef, err := path.Build(
+		testTenant, testUser, path.ExchangeService, path.EmailCategory, false, "folder-id")
+	require.NoError(t, err)
+
+	goodItemRepoRef, err := path.Build(
+		testTenant, testUser, path.ExchangeService, path.EmailCategory, true, "folder-id", "item-id")
+	require.NoError(t, err)
+
+	folderInfo := func() details.ItemInfo {
+		return details.ItemInfo{
+			Folder: &details.FolderInfo{
+				ItemType:    details.FolderItem,
+				DisplayName: secretFolder,
+			},
+		}
+	}
+
+	mailInfo := func() details.ItemInfo {
+		return details.ItemInfo{
+			Exchange: &details.ExchangeInfo{
+				ItemType: details.ExchangeMail,
+				Subject:  secretSubject,
+			},
+		}
+	}
+
+	table := []struct {
+		name  string
+		entry details.Entry
+	}{
+		{
+			// Branch 1: a folder entry whose location cannot be parsed.
+			name: "folder location",
+			entry: details.Entry{
+				RepoRef:     goodFolderRepoRef.String(),
+				ShortRef:    shortRef,
+				LocationRef: badLocation,
+				ItemInfo:    folderInfo(),
+			},
+		},
+		{
+			// Branch 2: a folder entry whose storage path cannot be
+			// parsed. Its location must be valid, or branch 1 fires
+			// first.
+			name: "folder path",
+			entry: details.Entry{
+				RepoRef:     badRepoRef,
+				ShortRef:    shortRef,
+				LocationRef: goodLocation,
+				ItemInfo:    folderInfo(),
+			},
+		},
+		{
+			// Branch 3: an item entry whose location cannot be parsed.
+			name: "item location",
+			entry: details.Entry{
+				RepoRef:     goodItemRepoRef.String(),
+				ShortRef:    shortRef,
+				LocationRef: badLocation,
+				ItemInfo:    mailInfo(),
+			},
+		},
+		{
+			// Branch 4: an item entry whose storage path cannot be
+			// parsed - the only branch the earlier fixture reached.
+			name: "item path",
+			entry: details.Entry{
+				RepoRef:     badRepoRef,
+				ShortRef:    shortRef,
+				LocationRef: goodLocation,
+				ItemInfo:    mailInfo(),
 			},
 		},
 	}
 
-	r, id, _ := repoWithDetails(t, deets, model.MergeBackup)
+	for _, test := range table {
+		t.Run(test.name, func(t *testing.T) {
+			deets := &details.Details{
+				DetailsModel: details.DetailsModel{Entries: []details.Entry{test.entry}},
+			}
 
-	_, err := r.ListItems(ctx, ItemsRequest{BackupPointID: id})
-	require.Error(t, err)
+			r, id, _ := repoWithDetails(t, deets, model.MergeBackup)
 
-	assert.Contains(t, err.Error(), "abcdef123456",
-		"an entry error must identify the entry by its opaque ID")
-	assert.NotContains(t, err.Error(), "a-very-secret-subject-line",
-		"an error must never carry an item's subject")
-	assert.NotContains(t, err.Error(), "k3ep-seed-mail",
-		"an error must never carry a folder name")
+			// Both entry points must be covered: ListFolders and
+			// ListItems share browseEntries, so whichever branch this
+			// case reaches, both calls must reach it.
+			_, folderErr := r.ListFolders(ctx, FolderTreeRequest{BackupPointID: id})
+			_, itemErr := r.ListItems(ctx, ItemsRequest{BackupPointID: id})
+
+			for _, err := range []error{folderErr, itemErr} {
+				require.Error(t, err, "this case must actually reach an error branch")
+
+				msg := err.Error()
+
+				assert.Contains(t, msg, shortRef,
+					"an entry error must identify the entry by its opaque ID")
+				assert.NotContains(t, msg, secretFolder,
+					"an error must never carry a folder's display name")
+				assert.NotContains(t, msg, secretSubject,
+					"an error must never carry an item's subject")
+				assert.NotContains(t, msg, goodLocation,
+					"an error must never carry a location, which is a path of display names")
+				assert.NotContains(t, msg, badLocation,
+					"an error must never carry a location, even an unparseable one")
+			}
+		})
+	}
 }
 
 // TestBrowse_ReadErrorIsReportedNotSwallowed proves a details read that

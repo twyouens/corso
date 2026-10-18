@@ -13,12 +13,19 @@ import (
 	"github.com/twyouens/corso/src/pkg/store"
 )
 
-// ErrEmptyTagFilter is returned by DeleteBackupPoints when called with no
-// tags. Deleting "every backup point with no particular tag" is never
-// implied by an empty filter: a caller that genuinely wants that iterates
+// ErrEmptyTagFilter is returned by DeleteBackupPoints, and by
+// FindItemsByName (added in chunk 0.7), when called with no tags.
+//
+// Deleting "every backup point with no particular tag" is never implied
+// by an empty filter: a caller that genuinely wants that iterates
 // ListBackupPoints(ctx, nil) themselves and deletes each ID explicitly, so
 // that intent is visible at the call site rather than hidden behind an
-// empty map.
+// empty map. FindItemsByName refuses an empty filter for the related
+// reason that an unscoped search would reach every object - and, if a
+// repository ever held more than one, every tenant - in the repository,
+// where RES-2 asks only for a search within one object's backup points.
+// ListBackupPoints is the deliberate exception: a nil filter there means
+// "every point", which is how a caller discovers what exists at all.
 var ErrEmptyTagFilter = errors.New("engine: DeleteBackupPoints requires at least one tag")
 
 // progressInterval is how often a running backup's ProgressFunc is called

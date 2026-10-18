@@ -127,8 +127,9 @@ type Folder struct {
 	// Not an ID a caller should reuse across backup points: the same
 	// mail folder in two different points may well have the same ID
 	// (the storage path it hashes is the same), but nothing guarantees
-	// that, and ListItems rejects an ID that is not in the point being
-	// listed (ErrFolderNotFound).
+	// that - a renamed or moved drive folder gets a different one, for
+	// the reasons set out on Item.ID - and ListItems rejects an ID that
+	// is not in the point being listed (ErrFolderNotFound).
 	ID string
 
 	// ParentID is the ID of the Folder this one sits inside, or "" when
@@ -188,6 +189,17 @@ type Folder struct {
 	// this folder's direct children only. Zero for a folder whose items
 	// carry no size (Exchange calendars and contacts folders routinely
 	// do).
+	//
+	// One inherited inconsistency, documented rather than corrected: the
+	// roll-up is computed by the fork when it writes the backup, using
+	// its own per-item size accessor, which for a Teams chat contributes
+	// the chat's MESSAGE COUNT rather than a byte count. Item.SizeBytes
+	// deliberately reports 0 for a Teams chat instead (see itemSize), so
+	// for a folder of chats this roll-up and the items beneath it would
+	// disagree. Teams chats are outside k3ep's v1 workloads, so nothing
+	// browse returns today is affected; recomputing the roll-up here
+	// instead of reporting what the backup recorded would be a bigger
+	// and less honest change than saying so.
 	SizeBytes int64
 
 	// ModifiedAt is the most recent modification time of any item at or
@@ -200,14 +212,34 @@ type Folder struct {
 // calendar event, a contact, a file in OneDrive or a SharePoint document
 // library, or a SharePoint list. Every field is a plain Go type.
 type Item struct {
-	// ID identifies this item within this backup point, stably: the same
-	// item in the same backup point is the same ID on every call. It is
-	// the value the fork's own item selectors accept as an item
-	// reference, so it is the handle a later restore (5.1) or erasure
-	// (7.3) takes as input - which is exactly why it must not be
-	// generated per call. It is derived (by the fork, when the backup was
-	// written) from the item's immutable storage path and stored in the
-	// point's own details manifest.
+	// ID identifies this item within this backup point. It is derived (by
+	// the fork, when the backup was written) from the item's storage path
+	// and stored in the point's own details manifest, so browse generates
+	// nothing: the same item in the same backup point is the same ID on
+	// every call, across a Close and OpenRepository, and across a later
+	// incremental backup that does not move it. It is the value the
+	// fork's own item selectors accept as an item reference, so it is the
+	// handle a later restore (5.1) or erasure (7.3) takes as input.
+	//
+	// The durable handle is the PAIR (backup point ID, Item.ID). Item.ID
+	// alone is not a cross-point identity, and a caller must not use it
+	// as a primary key for "this item" across points:
+	//
+	//   - For OneDrive and SharePoint library items the storage path is
+	//     built from the folder chain's DISPLAY NAMES (see
+	//     internal/m365/collection/drive's getCollectionPath, which reads
+	//     the item's parent reference path). Renaming OR moving any
+	//     ancestor folder therefore gives the same file a different ID in
+	//     the next backup point.
+	//   - For Exchange the path elements are container IDs, so renaming a
+	//     mail folder, calendar or contacts folder does not change its
+	//     items' IDs - but moving one does, because its parent chain does.
+	//
+	// None of that invalidates an already-listed ID: a backup point is
+	// immutable, so an ID listed from one point keeps identifying that
+	// item in that point forever. It only means an ID from point A may
+	// not resolve in point B, which is why FoundItem carries the point it
+	// came from and why ListItems rejects a folder ID from another point.
 	//
 	// Opaque, hashed and non-reversible: safe to log, store and put in a
 	// URL, and it reveals no item name, subject or filename. It is not
@@ -280,6 +312,21 @@ type Item struct {
 }
 
 // FolderTreeRequest asks for one backup point's folder tree.
+//
+// Tenancy is the caller's responsibility, not this package's. Unlike
+// ListBackupPoints, DeleteBackupPoints and FindItemsByName, which take a
+// tag filter, this takes a bare backup point ID and does NOT check the
+// point's tags against anything: a backup point ID is not
+// self-authorising, and holding one is not evidence of being entitled to
+// read it. That is deliberate and consistent with this package never
+// interpreting tags (see RepositoryConfig's trust-model note: tags are
+// not an authorization boundary and this package has no notion of "my"
+// tenant), but it means k3ep's own API layer must establish that the
+// point belongs to the requesting tenant - by listing it through that
+// tenant's own tag filter, or by checking the returned
+// FolderTree/ItemList's point against its own records - before handing an
+// ID here. A repository holding exactly one tenant's data (which is
+// k3ep's model) makes this moot; a shared one would not.
 type FolderTreeRequest struct {
 	// BackupPointID is the BackupPoint.ID to browse, from
 	// ListBackupPoints. Required: see ErrMissingBackupPointID.
@@ -323,6 +370,21 @@ type FolderTree struct {
 
 // ItemsRequest asks for the items in one folder, or in one whole backup
 // point.
+//
+// Tenancy is the caller's responsibility, not this package's. Unlike
+// ListBackupPoints, DeleteBackupPoints and FindItemsByName, which take a
+// tag filter, this takes a bare backup point ID and does NOT check the
+// point's tags against anything: a backup point ID is not
+// self-authorising, and holding one is not evidence of being entitled to
+// read it. That is deliberate and consistent with this package never
+// interpreting tags (see RepositoryConfig's trust-model note: tags are
+// not an authorization boundary and this package has no notion of "my"
+// tenant), but it means k3ep's own API layer must establish that the
+// point belongs to the requesting tenant - by listing it through that
+// tenant's own tag filter, or by checking the returned
+// FolderTree/ItemList's point against its own records - before handing an
+// ID here. A repository holding exactly one tenant's data (which is
+// k3ep's model) makes this moot; a shared one would not.
 type ItemsRequest struct {
 	// BackupPointID is the BackupPoint.ID to browse, from
 	// ListBackupPoints. Required: see ErrMissingBackupPointID.
@@ -381,6 +443,34 @@ type FindItemsRequest struct {
 	// Each result says which point it came from and what type that point
 	// is.
 	AllowIncompletePoints bool
+}
+
+// FindItemsResult is what one FindItemsByName call matched.
+//
+// It is a struct rather than a bare []FoundItem because a search spans
+// many backup points and some of them may not be readable, and a caller
+// has to be able to tell "nothing matches" from "not everything was
+// searched". Showing an admin an empty result when a point was skipped
+// would be a quiet wrong answer in exactly the situation - erasure
+// verification, a legal-hold check - where a wrong answer costs most.
+type FindItemsResult struct {
+	// Items is every match found, ordered newest backup point first (by
+	// that point's own creation time, then its ID to break ties), and
+	// within a point by (FolderPath, Name, ID).
+	Items []FoundItem
+
+	// UnreadableBackupPointIDs lists the backup points that matched
+	// req.Tags but whose details manifest could not be read, so were not
+	// searched. Normally empty. A point deleted between this call's own
+	// listing step and its read lands here, as does one whose manifest
+	// is genuinely damaged or whose storage is unreachable.
+	//
+	// When this is non-empty the result is PARTIAL: Items holds every
+	// match from the points that were readable, and a caller must
+	// surface that rather than presenting the result as complete. The
+	// IDs are safe to log and are what a caller needs in order to
+	// retry, audit or report the gap.
+	UnreadableBackupPointIDs []string
 }
 
 // FoundItem is one item FindItemsByName matched, with the backup point it
@@ -516,25 +606,35 @@ func (r *Repository) ListItems(ctx context.Context, req ItemsRequest) (ItemList,
 // skipped silently, since a find spans many points and one fragment
 // among them is not a reason to fail the search.
 //
+// A backup point whose details manifest cannot be read does NOT fail the
+// call either. It is recorded in
+// FindItemsResult.UnreadableBackupPointIDs and the search continues
+// through the rest. Failing outright would have made one bad point
+// enough to render an entire object unsearchable - including the
+// ordinary, benign race where a point is deleted (by retention, or by a
+// concurrent DeleteBackupPoints) between this call's own listing step
+// and its read. A caller must check that field: a non-empty one means
+// the result is partial. Only a failure of the listing step itself,
+// which yields no points to search at all, returns an error.
+//
 // Cost: this reads one details manifest per matching backup point, so it
 // is linear in the number of points the tags select, not in the size of
 // the repository. Scope the tags to one object.
-//
-// Results are ordered newest backup point first (by that point's own
-// creation time, then its ID to break ties), and within a point by
-// (FolderPath, Name, ID) - deterministic on every call.
-func (r *Repository) FindItemsByName(ctx context.Context, req FindItemsRequest) ([]FoundItem, error) {
+func (r *Repository) FindItemsByName(
+	ctx context.Context,
+	req FindItemsRequest,
+) (FindItemsResult, error) {
 	if len(req.Tags) == 0 {
-		return nil, ErrEmptyTagFilter
+		return FindItemsResult{}, ErrEmptyTagFilter
 	}
 
 	if len(req.Name) == 0 {
-		return nil, ErrEmptyNameQuery
+		return FindItemsResult{}, ErrEmptyNameQuery
 	}
 
 	points, err := r.ListBackupPoints(ctx, req.Tags)
 	if err != nil {
-		return nil, err
+		return FindItemsResult{}, err
 	}
 
 	// Newest point first, ID to break ties, so the order a caller sees
@@ -547,7 +647,7 @@ func (r *Repository) FindItemsByName(ctx context.Context, req FindItemsRequest) 
 		return points[i].ID < points[j].ID
 	})
 
-	found := []FoundItem{}
+	result := FindItemsResult{Items: []FoundItem{}}
 
 	for _, point := range points {
 		if !req.AllowIncompletePoints && !point.Type.IsIndependentlyRestorable() {
@@ -559,12 +659,14 @@ func (r *Repository) FindItemsByName(ctx context.Context, req FindItemsRequest) 
 		// it, an opted-in search would fail on the first assist point.
 		dm, _, err := r.backupDetails(ctx, point.ID, true)
 		if err != nil {
-			return nil, err
+			result.UnreadableBackupPointIDs = append(result.UnreadableBackupPointIDs, point.ID)
+			continue
 		}
 
 		_, items, err := browseEntries(dm, point.ID)
 		if err != nil {
-			return nil, err
+			result.UnreadableBackupPointIDs = append(result.UnreadableBackupPointIDs, point.ID)
+			continue
 		}
 
 		for _, it := range items {
@@ -572,7 +674,7 @@ func (r *Repository) FindItemsByName(ctx context.Context, req FindItemsRequest) 
 				continue
 			}
 
-			found = append(found, FoundItem{
+			result.Items = append(result.Items, FoundItem{
 				Item:                               it,
 				BackupPointID:                      point.ID,
 				BackupPointType:                    point.Type,
@@ -582,7 +684,7 @@ func (r *Repository) FindItemsByName(ctx context.Context, req FindItemsRequest) 
 		}
 	}
 
-	return found, nil
+	return result, nil
 }
 
 // nameMatches implements NameMatch. Case-insensitive in both modes, by

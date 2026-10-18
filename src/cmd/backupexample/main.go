@@ -281,9 +281,21 @@ func browse(
 		return fmt.Errorf("finding items by name: %w", err)
 	}
 
-	fmt.Printf("found %d item(s) matching %q across this object's backup points:\n", len(found), query)
+	// Worth copying: a result with unreadable points is PARTIAL, and
+	// saying so is the difference between "no match" and "not searched".
+	if len(found.UnreadableBackupPointIDs) > 0 {
+		fmt.Printf(
+			"warning: %d backup point(s) could not be searched: %v\n",
+			len(found.UnreadableBackupPointIDs),
+			found.UnreadableBackupPointIDs)
+	}
 
-	for _, f := range found {
+	fmt.Printf(
+		"found %d item(s) matching %q across this object's backup points:\n",
+		len(found.Items),
+		query)
+
+	for _, f := range found.Items {
 		fmt.Printf(
 			"  %s id=%s in folder %q of backup point %s (type %s, created %s)\n",
 			f.Item.Name,

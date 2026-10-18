@@ -661,11 +661,15 @@ func (suite *BrowseIntegrationSuite) TestBrowse_SeededObjectMatchesManifest() {
 			Match: engine.NameMatchExact,
 		})
 		require.NoError(t, err, clues.ToCore(err))
-		require.Len(t, exact, 1, "an exact name must match exactly the one seeded message")
-		assert.Equal(t, wantMessage.Name, exact[0].Item.Name)
-		assert.Equal(t, points["exchange"].ID, exact[0].BackupPointID)
-		assert.True(t, exact[0].BackupPointIndependentlyRestorable)
-		assert.NotEmpty(t, exact[0].Item.ID)
+		require.Len(t, exact.Items, 1, "an exact name must match exactly the one seeded message")
+		assert.Equal(t, wantMessage.Name, exact.Items[0].Item.Name)
+		assert.Equal(t, points["exchange"].ID, exact.Items[0].BackupPointID)
+		assert.True(t, exact.Items[0].BackupPointIndependentlyRestorable)
+		assert.NotEmpty(t, exact.Items[0].Item.ID)
+		assert.NotEmpty(t, exact.Items[0].Item.FolderID,
+			"the hit must carry the folder it was found in")
+		require.Empty(t, exact.UnreadableBackupPointIDs,
+			"every one of this object's points is readable, so the search must be complete")
 
 		// The same ID the browse listing gave for that message - a find
 		// and a browse must agree, or 5.1 and 7.3 would get different
@@ -681,7 +685,7 @@ func (suite *BrowseIntegrationSuite) TestBrowse_SeededObjectMatchesManifest() {
 		})
 		require.NoError(t, err, clues.ToCore(err))
 
-		assert.Equal(t, itemsByName(t, browsed.Items)[wantMessage.Name].ID, exact[0].Item.ID,
+		assert.Equal(t, itemsByName(t, browsed.Items)[wantMessage.Name].ID, exact.Items[0].Item.ID,
 			"finding an item by name and browsing to it must yield the same stable ID")
 
 		// Substring: the seed prefix matches every seeded item across
@@ -691,10 +695,11 @@ func (suite *BrowseIntegrationSuite) TestBrowse_SeededObjectMatchesManifest() {
 			Name: Prefix,
 		})
 		require.NoError(t, err, clues.ToCore(err))
-		assert.GreaterOrEqual(t, len(prefixed), len(exact),
+		assert.GreaterOrEqual(t, len(prefixed.Items), len(exact.Items),
 			"a substring of the seed prefix must match at least the exact hit")
+		assert.Empty(t, prefixed.UnreadableBackupPointIDs)
 
-		for _, f := range prefixed {
+		for _, f := range prefixed.Items {
 			assert.Contains(t, strings.ToLower(f.Item.Name), strings.ToLower(Prefix),
 				"a find must not return an item whose name does not match")
 		}
@@ -706,7 +711,9 @@ func (suite *BrowseIntegrationSuite) TestBrowse_SeededObjectMatchesManifest() {
 			Name: Prefix + "-no-such-item-" + uuid.NewString(),
 		})
 		require.NoError(t, err, clues.ToCore(err))
-		assert.Empty(t, none, "a name nothing carries must match nothing")
+		assert.Empty(t, none.Items, "a name nothing carries must match nothing")
+		assert.Empty(t, none.UnreadableBackupPointIDs,
+			"an empty result must be empty because nothing matched, not because nothing was searched")
 
 		// And a find scoped to a different object must not reach this
 		// object's items at all, even though both live in the same
@@ -717,7 +724,7 @@ func (suite *BrowseIntegrationSuite) TestBrowse_SeededObjectMatchesManifest() {
 			Name: wantMessage.Name,
 		})
 		require.NoError(t, err, clues.ToCore(err))
-		assert.Empty(t, otherObject,
+		assert.Empty(t, otherObject.Items,
 			"a find scoped to another object must not return this object's items")
 	})
 

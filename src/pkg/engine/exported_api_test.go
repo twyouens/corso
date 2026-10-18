@@ -44,6 +44,10 @@ import (
 //     inference - an exported function whose result type is written as a
 //     call to another function, say - is invisible to it.
 //   - It only reads this one directory's non-test files.
+//   - Generic type-parameter constraints ARE inspected, on both
+//     functions and types, since a caller must satisfy them. That was a
+//     gap review found and is closed; the package uses no generics
+//     today, so the coverage is latent but real.
 //   - A build-tag-excluded file is still parsed (parser.ParseFile ignores
 //     build constraints), which here errs on the safe side.
 //   - It says nothing about whether the *values* an exported signature
@@ -172,6 +176,14 @@ func TestEngineAPI_ExportedSignaturesNameNoInternalType(t *testing.T) {
 					}
 				}
 
+				// A generic function's type-parameter CONSTRAINTS are
+				// part of its exported signature: a caller in another
+				// module has to satisfy them, so naming an internal type
+				// there is as unusable as naming one in a parameter.
+				// Added after review confirmed
+				// `func ProbeH[T model.StableID](v T) string` passed the
+				// earlier version of this check clean.
+				assertNoInternalFields(t, file, d.Name.Name+" type parameter", d.Type.TypeParams, quals, tainted)
 				assertNoInternalFields(t, file, d.Name.Name+" parameter", d.Type.Params, quals, tainted)
 				assertNoInternalFields(t, file, d.Name.Name+" result", d.Type.Results, quals, tainted)
 
@@ -307,7 +319,34 @@ func typeSpecInternalRef(ts *ast.TypeSpec, quals, tainted map[string]string) str
 		}
 	}
 
+	for _, expr := range typeParamParts(ts.TypeParams) {
+		if why := internalRef(expr, quals, tainted); why != "" {
+			return why
+		}
+	}
+
 	return ""
+}
+
+// typeParamParts returns a generic declaration's type-parameter
+// constraints, which are part of its exported signature.
+func typeParamParts(tp *ast.FieldList) map[string]ast.Expr {
+	parts := map[string]ast.Expr{}
+
+	if tp == nil {
+		return parts
+	}
+
+	for i, fld := range tp.List {
+		label := "type parameter " + strconv.Itoa(i)
+		if len(fld.Names) > 0 {
+			label = "type parameter " + fld.Names[0].Name
+		}
+
+		parts[label] = fld.Type
+	}
+
+	return parts
 }
 
 func assertExportedTypeIsClean(
@@ -319,7 +358,13 @@ func assertExportedTypeIsClean(
 ) {
 	t.Helper()
 
-	for label, expr := range nameableParts(ts) {
+	parts := nameableParts(ts)
+
+	for label, expr := range typeParamParts(ts.TypeParams) {
+		parts[label] = expr
+	}
+
+	for label, expr := range parts {
 		what := "type " + ts.Name.Name
 		if len(label) > 0 {
 			what += " " + label
