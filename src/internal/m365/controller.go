@@ -39,21 +39,34 @@ type Controller struct {
 	tenant      string
 	credentials account.M365Config
 
-	// resourceHandler and IDNameLookup below are both guarded by mu (see
-	// its updated comment): a Controller is created once per repository
-	// connection and reused across every later ConnectDataProvider call
-	// on that connection (pkg/repository's connectToM365), each of which
-	// may run concurrently with another on a different goroutine - two
-	// concurrent pkg/engine.Backup calls on one *engine.Repository is
-	// exactly this shape. Before this lock was added, EnsureResourceHandler
-	// writing resourceHandler while PopulateProtectedResourceIDAndName read
-	// it was a confirmed data race (go test -race), and the race's
-	// real-world failure mode is not just a torn read: EnsureResourceHandler
-	// could legitimately change resourceHandler mid-operation and resolve a
+	// resourceHandler's every read and write is guarded by mu: a
+	// Controller is created once per repository connection and reused
+	// across every later ConnectDataProvider call on that connection
+	// (pkg/repository's connectToM365), each of which may run
+	// concurrently with another on a different goroutine - two concurrent
+	// pkg/engine.Backup calls on one *engine.Repository is exactly this
+	// shape. Before this lock was added, EnsureResourceHandler writing
+	// resourceHandler while PopulateProtectedResourceIDAndName read it was
+	// a confirmed data race (go test -race), and the race's real-world
+	// failure mode is not just a torn read: EnsureResourceHandler could
+	// legitimately change resourceHandler mid-operation and resolve a
 	// SharePoint site through the previous operation's Users getter.
 	resourceHandler idname.GetResourceIDAndNamer
-	// maps of resource owner ids to names, and names to ids.
-	// not guaranteed to be populated, only here as a post-population
+	// IDNameLookup's one write (inside PopulateProtectedResourceIDAndName)
+	// is guarded by mu too, but it has no concurrent production reader to
+	// race against: ProduceBackupCollections (internal/m365/backup.go),
+	// the one call site that used to read this field, now builds its own
+	// value from BackupProducerConfig.ProtectedResource instead - the
+	// same resource this field is populated from for a single backup
+	// operation, but without touching shared state. A -race run
+	// (TestControllerConcurrency_ProduceBackupCollectionsAndPopulate,
+	// controller_race_test.go) found exactly this read racing against
+	// PopulateProtectedResourceIDAndName's write before that change; it
+	// is kept as a permanent regression test for the write side even
+	// though the read it originally caught is gone.
+	//
+	// Maps of resource owner ids to names, and names to ids. Not
+	// guaranteed to be populated, only here as a post-population
 	// reference for processes that choose to populate the values.
 	IDNameLookup idname.Cacher
 
@@ -61,9 +74,14 @@ type Controller struct {
 	wg     *sync.WaitGroup
 	region *trace.Region
 
-	// mu synchronizes updates to `status`, `resourceHandler` and
-	// `IDNameLookup` - every field a Controller mutates after
-	// construction while potentially shared across concurrent operations.
+	// mu guards every read and write of resourceHandler (above) and
+	// status (below) - status is written under it by UpdateStatus and
+	// read under it by Wait/Status/PrintableStatus, all of which can run
+	// concurrently with UpdateStatus on a Controller shared across
+	// concurrent operations, same as resourceHandler. It does not, on its
+	// own, guard wg: Wait()'s own replacement of wg with a fresh
+	// *sync.WaitGroup is a pre-existing concern this fix does not widen
+	// its scope to cover.
 	mu     sync.Mutex
 	status support.ControllerOperationStatus // contains the status of the last run status
 
@@ -205,6 +223,12 @@ func (ctrl *Controller) Wait() *data.CollectionStats {
 	}()
 	ctrl.wg.Wait()
 
+	// Guards the read of status below and its own reset, the same as
+	// UpdateStatus's write - this method both reads and resets status,
+	// so it needs the lock for both, not just the read.
+	ctrl.mu.Lock()
+	defer ctrl.mu.Unlock()
+
 	// clean up and reset statefulness
 	dcs := data.CollectionStats{
 		Folders:   ctrl.status.Folders,
@@ -235,11 +259,17 @@ func (ctrl *Controller) UpdateStatus(status *support.ControllerOperationStatus) 
 
 // Status returns the current status of the controller process.
 func (ctrl *Controller) Status() support.ControllerOperationStatus {
+	ctrl.mu.Lock()
+	defer ctrl.mu.Unlock()
+
 	return ctrl.status
 }
 
 // PrintableStatus returns a string formatted version of the status.
 func (ctrl *Controller) PrintableStatus() string {
+	ctrl.mu.Lock()
+	defer ctrl.mu.Unlock()
+
 	return ctrl.status.String()
 }
 
