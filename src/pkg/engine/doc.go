@@ -1,7 +1,9 @@
 // Package engine is the single public surface k3ep (or any other caller in
 // a different Go module) uses to open an encrypted Kopia repository, back
-// up Microsoft 365 data into it with caller-supplied tags, and list,
-// delete or run maintenance on the resulting backup points.
+// up Microsoft 365 data into it with caller-supplied tags, list, delete or
+// run maintenance on the resulting backup points, and browse what those
+// points contain - a folder tree, the items in a folder, and finding an
+// item by name (RES-1, RES-2; see browse.go).
 //
 // It exists because Go forbids importing another module's internal
 // packages (REPO-2): the lower-level pkg/repository package - the fork's

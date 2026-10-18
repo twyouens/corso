@@ -190,5 +190,109 @@ func run() error {
 		fmt.Printf("  %s (type %s, created %s, tags %v)\n", p.ID, p.Type, p.CreatedAt.Format(time.RFC3339), p.Tags)
 	}
 
+	return browse(ctx, repo, point, userID)
+}
+
+// browse is chunk 0.7's half of this example: it walks the backup point
+// just created, lists one folder's items, and finds an item by name -
+// again using nothing but pkg/engine, so this directory's
+// TestExample_ImportsNoInternalPackage covers the browse API too and not
+// just 0.6's.
+//
+// Worth copying from, if you are writing the k3ep side: note that it
+// checks IsIndependentlyRestorable before presenting a tree, rather than
+// assuming every point ListBackupPoints returned is a complete one.
+func browse(
+	ctx context.Context,
+	repo *engine.Repository,
+	point engine.BackupPoint,
+	userID string,
+) error {
+	if !point.Type.IsIndependentlyRestorable() {
+		// Not an error: an assist point is real, tagged content a tenant
+		// must be able to find and delete. It is just not a complete
+		// point in time, so it is not something to browse for restore.
+		// engine.ListFolders would return ErrIncompleteBackupPoint here
+		// unless asked otherwise.
+		fmt.Printf(
+			"backup point %s is of type %s, so it is not independently restorable; not browsing it\n",
+			point.ID,
+			point.Type)
+
+		return nil
+	}
+
+	tree, err := repo.ListFolders(ctx, engine.FolderTreeRequest{BackupPointID: point.ID})
+	if err != nil {
+		return fmt.Errorf("listing the backup point's folders: %w", err)
+	}
+
+	fmt.Printf("backup point %s holds %d folder(s):\n", tree.BackupPointID, len(tree.Folders))
+
+	for _, f := range tree.Folders {
+		fmt.Printf(
+			"  %s [%s/%s] id=%s parent=%q %d bytes\n",
+			f.Path, f.Service, f.Category, f.ID, f.ParentID, f.SizeBytes)
+	}
+
+	if len(tree.Folders) == 0 {
+		fmt.Println("no folders to list items from")
+		return nil
+	}
+
+	// Items directly inside the first folder, each with the stable ID a
+	// later restore or erasure would be handed.
+	folder := tree.Folders[0]
+
+	list, err := repo.ListItems(ctx, engine.ItemsRequest{
+		BackupPointID: point.ID,
+		FolderID:      folder.ID,
+	})
+	if err != nil {
+		return fmt.Errorf("listing items in a folder: %w", err)
+	}
+
+	fmt.Printf("folder %s holds %d item(s) directly:\n", folder.Path, len(list.Items))
+
+	for _, it := range list.Items {
+		fmt.Printf(
+			"  %s id=%s %d bytes created=%s modified=%s\n",
+			it.Name,
+			it.ID,
+			it.SizeBytes,
+			it.CreatedAt.Format(time.RFC3339),
+			it.ModifiedAt.Format(time.RFC3339))
+	}
+
+	if len(list.Items) == 0 {
+		return nil
+	}
+
+	// Find that first item again by (part of) its name, across every
+	// backup point this object has - RES-2. Name matching only: nothing
+	// here reads item content.
+	query := list.Items[0].Name
+
+	found, err := repo.FindItemsByName(ctx, engine.FindItemsRequest{
+		Tags: map[string]string{"k3ep-object": userID},
+		Name: query,
+	})
+	if err != nil {
+		return fmt.Errorf("finding items by name: %w", err)
+	}
+
+	fmt.Printf("found %d item(s) matching %q across this object's backup points:\n", len(found), query)
+
+	for _, f := range found {
+		fmt.Printf(
+			"  %s id=%s in folder %q of backup point %s (type %s, created %s)\n",
+			f.Item.Name,
+			f.Item.ID,
+			f.Item.FolderPath,
+			f.BackupPointID,
+			f.BackupPointType,
+			f.BackupPointCreatedAt.Format(time.RFC3339))
+	}
+
 	return nil
 }

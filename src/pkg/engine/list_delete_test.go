@@ -12,6 +12,8 @@ import (
 	"github.com/twyouens/corso/src/internal/model"
 	"github.com/twyouens/corso/src/internal/tester"
 	"github.com/twyouens/corso/src/pkg/backup"
+	"github.com/twyouens/corso/src/pkg/backup/details"
+	"github.com/twyouens/corso/src/pkg/fault"
 	"github.com/twyouens/corso/src/pkg/repository"
 	"github.com/twyouens/corso/src/pkg/store"
 )
@@ -23,12 +25,59 @@ import (
 // about exactly what engine.Repository's list/delete path touches,
 // without hand-stubbing the fork's much larger Repositoryer interface
 // (Restorer, Exporter, Debugger, ...).
+// Extended by chunk 0.7 with the details-manifest read that browse
+// (ListFolders/ListItems/FindItemsByName) adds to that path, keeping one
+// fixture for the whole engine.Repository -> repository.Repositoryer
+// surface rather than a second, parallel fake.
 type fakeRepo struct {
 	repository.Repositoryer
 
 	backups    []*backup.Backup
 	deleteErr  error
 	deletedIDs []string
+
+	// deets maps a backup ID to the details manifest GetBackupDetails
+	// should return for it. A backup present in backups but absent here
+	// behaves like a point whose manifest could not be read.
+	deets map[string]*details.Details
+	// detailsFailure, when set, is returned as the fault bus's failure
+	// from every GetBackupDetails call, so a test can exercise the
+	// not-found and read-error paths.
+	detailsFailure error
+	// detailsCalls counts GetBackupDetails calls, so a test can prove a
+	// backup point was (or was not) read.
+	detailsCalls int
+}
+
+// GetBackupDetails mirrors the real pkg/repository method's signature,
+// including the fact that it reports failure through the returned
+// *fault.Bus rather than an error return.
+func (f *fakeRepo) GetBackupDetails(
+	ctx context.Context,
+	backupID string,
+) (*details.Details, *backup.Backup, *fault.Bus) {
+	f.detailsCalls++
+
+	errs := fault.New(false)
+
+	if f.detailsFailure != nil {
+		return nil, nil, errs.Fail(f.detailsFailure)
+	}
+
+	var bup *backup.Backup
+
+	for _, b := range f.backups {
+		if string(b.ID) == backupID {
+			bup = b
+			break
+		}
+	}
+
+	if bup == nil {
+		return nil, nil, errs.Fail(repository.ErrorBackupNotFound)
+	}
+
+	return f.deets[backupID], bup, errs
 }
 
 // AllBackupsByTag deliberately does not re-implement store.Tags'
