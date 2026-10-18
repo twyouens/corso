@@ -86,6 +86,24 @@ The test-tenant env file must define `AZURE_TENANT_ID`, `AZURE_CLIENT_ID` and `A
   reads a file **outside** `src/`, assume the same hole until it proves otherwise - and note that
   `-count=1` belongs in that chunk's own command, not in the `Makefile`'s `check` target, which would
   disable test caching for every chunk.
+- **The Graph concurrency limiter is per client, and there is no process-global one to initialise.**
+  Chunk 0.10 removed `graph.InitializeConcurrencyLimiter`, `api.InitConcurrencyLimit` and the
+  package-level `concurrencyLimitMiddlewareSingleton`/`sync.Once` they latched. A client's capacity
+  comes from the `control.Options.Parallelism.ItemFetch` its caller passed (`api.NewClient` turns it
+  into a `graph.ConcurrencyLimit` option), is clamped to 1-4, and is installed on every client
+  `graph.kiotaMiddlewares` builds - unconditionally, so no code path can produce a Graph client with
+  no limiter. Do not add a package-level limiter or latch back:
+  `TestGraphPackage_HasNoPackageLevelConcurrencyLimiterState` parses the `graph` package's own sources
+  and fails on any package-level `var` mentioning `concurrencyLimiterMiddleware` or `sync.Once`. Test
+  suites no longer need to initialise anything before their first Graph call. Two things stay
+  process-wide and are not this convention: the per-minute rate limiters in
+  `concurrency_middleware.go` (package-level by design, and they bound rate rather than simultaneity),
+  and `graph.internalMiddleware` - the Requester's chain, used for arbitrary URLs and large item
+  content - which carries no concurrency limiter at all, upstream included.
+  **If a chunk needs to observe a client's capacity, read it rather than the value requested:**
+  `adapterWrap.ConcurrencyLimit()` returns the capacity of the semaphore actually installed, because a
+  mutation during 0.10 showed that a test reading the *requested* value passes unchanged against a
+  reinstated process-global limiter.
 - A repository connection's Microsoft 365 data provider is reused across every `Backup`/`Restore`/`Export` call made on it (see `pkg/repository`'s `connectToM365`), and its resource lookup handler (Users/Groups/Sites) is tied to whichever `path.ServiceType` was passed the *last* time `ConnectDataProvider` ran - including `path.UnknownService`, which `pkg/engine` passes while opening a repository before any service has been chosen. A new call site that reuses an existing `*m365.Controller` for a different service must call `Controller.EnsureResourceHandler` with that service first, or risk a nil-handler panic the fork's own tests never catch (the CLI always opens a repository already committed to one service).
 
 ## Do not
