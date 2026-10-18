@@ -31,14 +31,15 @@ var (
 	}
 
 	goodS3Map = map[string]string{
-		keyS3Bucket:         "bkt",
-		keyS3Endpoint:       "end",
-		keyS3Prefix:         "pre/",
-		keyS3DoNotUseTLS:    "false",
-		keyS3DoNotVerifyTLS: "false",
-		keyS3AccessKey:      "access",
-		keyS3SecretKey:      "secret",
-		keyS3SessionToken:   "token",
+		keyS3Bucket:                  "bkt",
+		keyS3Endpoint:                "end",
+		keyS3Prefix:                  "pre/",
+		keyS3DoNotUseTLS:             "false",
+		keyS3DoNotVerifyTLS:          "false",
+		keyS3AccessKey:               "access",
+		keyS3SecretKey:               "secret",
+		keyS3SessionToken:            "token",
+		keyS3AllowAmbientCredentials: "false",
 	}
 )
 
@@ -156,16 +157,22 @@ func (suite *S3CfgUnitSuite) TestStorage_S3Config_StringConfig() {
 				Prefix:         "pre/",
 				DoNotUseTLS:    true,
 				DoNotVerifyTLS: true,
+				// Non-blank, so this case still exercises what it is
+				// actually about (TLS flag serialization), now that
+				// validate() requires credentials by default - see
+				// AllowAmbientCredentials in s3.go.
+				AWS: credentials.AWS{AccessKey: "access", SecretKey: "secret"},
 			},
 			expect: map[string]string{
-				keyS3Bucket:         "bkt",
-				keyS3Endpoint:       "end",
-				keyS3Prefix:         "pre/",
-				keyS3DoNotUseTLS:    "true",
-				keyS3DoNotVerifyTLS: "true",
-				keyS3AccessKey:      "",
-				keyS3SecretKey:      "",
-				keyS3SessionToken:   "",
+				keyS3Bucket:                  "bkt",
+				keyS3Endpoint:                "end",
+				keyS3Prefix:                  "pre/",
+				keyS3DoNotUseTLS:             "true",
+				keyS3DoNotVerifyTLS:          "true",
+				keyS3AccessKey:               "access",
+				keyS3SecretKey:               "secret",
+				keyS3SessionToken:            "",
+				keyS3AllowAmbientCredentials: "false",
 			},
 		},
 	}
@@ -193,4 +200,58 @@ func (suite *S3CfgUnitSuite) TestStorage_S3Config_Normalize() {
 	result := st.normalize()
 	assert.Equal(suite.T(), normalBkt, result.Bucket)
 	assert.NotEqual(suite.T(), st.Bucket, result.Bucket)
+}
+
+// TestS3Config_ApplyConfigOverrides_CLIPathAllowsAmbientCredentials proves
+// chunk 0.6's review round-3 fix: ApplyConfigOverrides - reached only
+// through the CLI's own pkg/config.ReadCorsoConfig/configureStorage, and
+// the cmd/longevity_test and cmd/s3checker developer tools, never through
+// pkg/engine - keeps working with no explicit AWS credentials anywhere
+// (no override, no stored config, and this test clears the two AWS env
+// vars for its own duration so a developer's real credentials in the
+// environment can't accidentally make this pass for the wrong reason).
+// validate()'s new default requirement for AccessKey/SecretKey must not
+// break this path: ApplyConfigOverrides sets AllowAmbientCredentials
+// unconditionally, specifically so this keeps succeeding.
+func (suite *S3CfgUnitSuite) TestS3Config_ApplyConfigOverrides_CLIPathAllowsAmbientCredentials() {
+	t := suite.T()
+
+	for _, key := range []string{credentials.AWSAccessKeyID, credentials.AWSSecretAccessKey, credentials.AWSSessionToken} {
+		t.Setenv(key, "")
+	}
+
+	c := &S3Config{}
+
+	overrides := map[string]string{
+		Bucket: "bkt",
+	}
+
+	err := c.ApplyConfigOverrides(testGetter{}, false, false, overrides)
+	require.NoError(t, err, clues.ToCore(err))
+
+	assert.True(t, c.AllowAmbientCredentials, "the CLI's own path must set AllowAmbientCredentials")
+	assert.Empty(t, c.AccessKey)
+	assert.Empty(t, c.SecretKey)
+}
+
+// TestS3Config_Validate_RejectsBlankCredentialsByDefault proves the
+// shared validator's own new default: with AllowAmbientCredentials unset
+// (false, the zero value), a Bucket-only S3Config is rejected for a
+// blank AccessKey/SecretKey - the gap the security reviewer proved was
+// reachable even through pkg/repository directly, bypassing pkg/engine
+// entirely. Setting AllowAmbientCredentials explicitly is what the CLI's
+// own ApplyConfigOverrides does (see the sibling test above); nothing
+// else in this fork may.
+func (suite *S3CfgUnitSuite) TestS3Config_Validate_RejectsBlankCredentialsByDefault() {
+	t := suite.T()
+
+	blank := S3Config{Bucket: "bkt"}
+	err := blank.validate()
+	require.Error(t, err)
+
+	allowed := S3Config{Bucket: "bkt", AllowAmbientCredentials: true}
+	assert.NoError(t, allowed.validate())
+
+	withCreds := S3Config{Bucket: "bkt", AWS: credentials.AWS{AccessKey: "a", SecretKey: "b"}}
+	assert.NoError(t, withCreds.validate())
 }

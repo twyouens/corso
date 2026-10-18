@@ -6,6 +6,7 @@ import (
 	"reflect"
 	"slices"
 	"strconv"
+	"strings"
 
 	"github.com/alcionai/clues"
 	"github.com/spf13/cast"
@@ -22,6 +23,22 @@ type S3Config struct {
 	Prefix         string
 	DoNotUseTLS    bool
 	DoNotVerifyTLS bool
+	// AllowAmbientCredentials opts out of this package's own requirement
+	// (added to validate(), below) that AccessKey and SecretKey be
+	// explicitly set: when false (the default - note this is NOT the
+	// default conventional for an "allow" flag, deliberately, so a caller
+	// that never touches this field fails closed), an S3Config with
+	// either empty is rejected outright rather than being handed to
+	// Kopia's S3 blob storage, which falls back silently to its AWS SDK's
+	// own ambient-credential chain (environment variables, then IMDS) for
+	// any credential left blank - reaching a caller-chosen bucket,
+	// prefix and endpoint using the *platform's* identity rather than
+	// one the caller actually supplied. The CLI's own ApplyConfigOverrides
+	// below sets this true unconditionally: it has always legitimately
+	// supported running under a human's or CI job's own AWS identity with
+	// no explicit keys, and that must keep working. No other caller in
+	// this fork sets it; pkg/engine, specifically, never does.
+	AllowAmbientCredentials bool
 }
 
 var excludedS3ConfigFieldsForHashing = []string{
@@ -30,18 +47,20 @@ var excludedS3ConfigFieldsForHashing = []string{
 	"AccessKey",
 	"SecretKey",
 	"SessionToken",
+	"AllowAmbientCredentials",
 }
 
 // config key consts
 const (
-	keyS3AccessKey      = "s3_access_key"
-	keyS3Bucket         = "s3_bucket"
-	keyS3Endpoint       = "s3_endpoint"
-	keyS3Prefix         = "s3_prefix"
-	keyS3SecretKey      = "s3_secret_key"
-	keyS3SessionToken   = "s3_session_token"
-	keyS3DoNotUseTLS    = "s3_donotusetls"
-	keyS3DoNotVerifyTLS = "s3_donotverifytls"
+	keyS3AccessKey               = "s3_access_key"
+	keyS3Bucket                  = "s3_bucket"
+	keyS3Endpoint                = "s3_endpoint"
+	keyS3Prefix                  = "s3_prefix"
+	keyS3SecretKey               = "s3_secret_key"
+	keyS3SessionToken            = "s3_session_token"
+	keyS3DoNotUseTLS             = "s3_donotusetls"
+	keyS3DoNotVerifyTLS          = "s3_donotverifytls"
+	keyS3AllowAmbientCredentials = "s3_allow_ambient_credentials"
 )
 
 // config exported name consts
@@ -93,6 +112,7 @@ func buildS3ConfigFromMap(config map[string]string) (*S3Config, error) {
 		c.Prefix = orEmptyString(config[keyS3Prefix])
 		c.DoNotUseTLS = str.ParseBool(config[keyS3DoNotUseTLS])
 		c.DoNotVerifyTLS = str.ParseBool(config[keyS3DoNotVerifyTLS])
+		c.AllowAmbientCredentials = str.ParseBool(config[keyS3AllowAmbientCredentials])
 	}
 
 	return c, c.validate()
@@ -100,11 +120,13 @@ func buildS3ConfigFromMap(config map[string]string) (*S3Config, error) {
 
 func (c *S3Config) normalize() S3Config {
 	return S3Config{
-		Bucket:         common.NormalizeBucket(c.Bucket),
-		Endpoint:       c.Endpoint,
-		Prefix:         common.NormalizePrefix(c.Prefix),
-		DoNotUseTLS:    c.DoNotUseTLS,
-		DoNotVerifyTLS: c.DoNotVerifyTLS,
+		AWS:                     c.AWS,
+		Bucket:                  common.NormalizeBucket(c.Bucket),
+		Endpoint:                c.Endpoint,
+		Prefix:                  common.NormalizePrefix(c.Prefix),
+		DoNotUseTLS:             c.DoNotUseTLS,
+		DoNotVerifyTLS:          c.DoNotVerifyTLS,
+		AllowAmbientCredentials: c.AllowAmbientCredentials,
 	}
 }
 
@@ -114,19 +136,32 @@ func (c *S3Config) normalize() S3Config {
 func (c *S3Config) StringConfig() (map[string]string, error) {
 	cn := c.normalize()
 	cfg := map[string]string{
-		keyS3AccessKey:      c.AccessKey,
-		keyS3Bucket:         cn.Bucket,
-		keyS3Endpoint:       cn.Endpoint,
-		keyS3Prefix:         cn.Prefix,
-		keyS3SecretKey:      c.SecretKey,
-		keyS3SessionToken:   c.SessionToken,
-		keyS3DoNotUseTLS:    strconv.FormatBool(cn.DoNotUseTLS),
-		keyS3DoNotVerifyTLS: strconv.FormatBool(cn.DoNotVerifyTLS),
+		keyS3AccessKey:               c.AccessKey,
+		keyS3Bucket:                  cn.Bucket,
+		keyS3Endpoint:                cn.Endpoint,
+		keyS3Prefix:                  cn.Prefix,
+		keyS3SecretKey:               c.SecretKey,
+		keyS3SessionToken:            c.SessionToken,
+		keyS3DoNotUseTLS:             strconv.FormatBool(cn.DoNotUseTLS),
+		keyS3DoNotVerifyTLS:          strconv.FormatBool(cn.DoNotVerifyTLS),
+		keyS3AllowAmbientCredentials: strconv.FormatBool(cn.AllowAmbientCredentials),
 	}
 
 	return cfg, cn.validate()
 }
 
+// validate requires Bucket always, and - unless AllowAmbientCredentials is
+// set - a non-blank AccessKey and SecretKey too. See
+// AllowAmbientCredentials' own doc comment for why: without this, an
+// S3Config with no credentials reaches Kopia's S3 blob storage, which
+// falls back silently to its AWS SDK's own ambient-credential chain,
+// signing requests with the platform's identity rather than one the
+// caller actually supplied - confirmed live. Whitespace-only values
+// (" ", "	") are treated as blank: they are not valid AWS credentials
+// either, and would otherwise pass this check only to fail later, after
+// several signed-but-rejected round trips against the caller-named
+// endpoint, with a confusing "bucket does not exist" rather than a clear
+// error here.
 func (c S3Config) validate() error {
 	check := map[string]string{
 		Bucket: c.Bucket,
@@ -134,6 +169,14 @@ func (c S3Config) validate() error {
 	for k, v := range check {
 		if len(v) == 0 {
 			return clues.Stack(errMissingRequired, clues.New(k))
+		}
+	}
+
+	if !c.AllowAmbientCredentials {
+		if len(strings.TrimSpace(c.AccessKey)) == 0 || len(strings.TrimSpace(c.SecretKey)) == 0 {
+			return clues.Stack(
+				errMissingRequired,
+				clues.New("accessKey/secretKey (or set AllowAmbientCredentials to use ambient AWS credentials)"))
 		}
 	}
 
@@ -250,6 +293,20 @@ func (c *S3Config) ApplyConfigOverrides(
 		overrides[DoNotVerifyTLS],
 		strconv.FormatBool(c.DoNotVerifyTLS),
 		"false"))
+
+	// The CLI's own config path, and only the CLI's: ApplyConfigOverrides
+	// is reached exclusively through pkg/config.ReadCorsoConfig/
+	// configureStorage, called only from cli/repo's command handlers and
+	// the cmd/longevity_test and cmd/s3checker developer tools - never
+	// from pkg/engine, which builds a Storage directly via
+	// storage.NewStorage and never touches this method. The CLI has
+	// always legitimately supported running with no explicit S3
+	// credentials (environment variables, an EC2/ECS instance role);
+	// this keeps that working now that validate() requires
+	// AccessKey/SecretKey by default. Deliberately unconditional, not
+	// tied to a flag or config-file value: this is restoring the CLI's
+	// own pre-existing behavior, not a new user-facing choice.
+	c.AllowAmbientCredentials = true
 
 	return c.validate()
 }
