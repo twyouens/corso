@@ -80,7 +80,27 @@ func (ctrl *Controller) ProduceBackupCollections(
 	bpc.Options.Parallelism.ItemFetch = graph.Parallelism(service).
 		ItemOverride(ctx, bpc.Options.Parallelism.ItemFetch)
 
-	err := verifyBackupInputs(bpc.Selector, ctrl.IDNameLookup.IDs())
+	// Built from bpc.ProtectedResource - the specific resource owner this
+	// operation already resolved - rather than read from the shared,
+	// mutable ctrl.IDNameLookup. Both ultimately come from the same
+	// PopulateProtectedResourceIDAndName call for a single backup
+	// operation (see internal/operations/backup.go's doBackupProduce,
+	// which sets both from the same protectedResource value), so this is
+	// not a behavior change - but ctrl.IDNameLookup is a single field on a
+	// Controller reused across every concurrent operation on the same
+	// repository connection (see Controller's own doc comment), and
+	// reading it here, unguarded, raced against
+	// PopulateProtectedResourceIDAndName's write under -race with both
+	// sides being this fork's own code. Building a fresh, local value
+	// from this call's own bpc avoids the shared state entirely, which is
+	// simpler and cheaper than taking Controller's mutex for the duration
+	// of this check.
+	var cachedIDs []string
+	if bpc.ProtectedResource != nil {
+		cachedIDs = []string{bpc.ProtectedResource.ID()}
+	}
+
+	err := verifyBackupInputs(bpc.Selector, cachedIDs)
 	if err != nil {
 		return nil, nil, false, clues.StackWC(ctx, err)
 	}

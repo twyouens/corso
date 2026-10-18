@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/suite"
 
 	"github.com/twyouens/corso/src/internal/tester"
+	"github.com/twyouens/corso/src/pkg/credentials"
 )
 
 type testConfig struct {
@@ -133,6 +134,12 @@ func getTestS3Config(bucket, endpoint, prefix string) *S3Config {
 		Bucket:   bucket,
 		Endpoint: endpoint,
 		Prefix:   prefix,
+		// Non-blank: validate() requires credentials by default as of
+		// this review round (see AllowAmbientCredentials in s3.go), and
+		// this helper's only caller is a hash-stability test that does
+		// not care about credential values - AccessKey/SecretKey are
+		// excluded from the hash itself (excludedS3ConfigFieldsForHashing).
+		AWS: credentials.AWS{AccessKey: "test-access-key", SecretKey: "test-secret-key"},
 	}
 }
 

@@ -2,10 +2,12 @@ package operations
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"github.com/alcionai/clues"
 	"github.com/google/uuid"
+	"github.com/kopia/kopia/repo/manifest"
 
 	"github.com/twyouens/corso/src/internal/common/crash"
 	"github.com/twyouens/corso/src/internal/common/idname"
@@ -52,6 +54,17 @@ type BackupOperation struct {
 	// facilitate integration testing that requires a certain backup version, and
 	// should be removed when we have a more controlled workaround.
 	BackupVersion int
+
+	// AdditionalTags holds caller-supplied tags (pkg/engine's Backup is the
+	// only promoted caller today) to persist on the resulting backup model
+	// alongside the fork's own bookkeeping tags (model.ServiceTag,
+	// model.BackupTypeTag). persistResults below merges these in without
+	// ever letting one override a key the fork itself already set: those
+	// two tags drive merge/assist/preview base-selection logic elsewhere,
+	// so a caller-controlled value colliding with them must never take
+	// effect, even if some future caller bypasses pkg/engine's own
+	// reserved-key validation and sets this field directly.
+	AdditionalTags map[string]string
 
 	account account.Account
 	bp      inject.BackupProducer
@@ -182,6 +195,46 @@ func isMergeBackup(
 	}
 
 	return len(err.Recovered()) == 0
+}
+
+// classifyBackupType decides which of model.PreviewBackup/MergeBackup/
+// AssistBackup a backup's tags should carry, or returns an error if it
+// fits none of them - the exact logic createBackupModels applies to
+// tags[model.BackupTypeTag], extracted into its own function purely so it
+// is unit-testable without createBackupModels' streamstore and model
+// store dependencies (see classify_backup_type_test.go). Nobody had
+// proven, before that test, that a live partial failure actually produces
+// model.AssistBackup rather than some other value or a classification
+// that silently stops happening - the two existing tests nearest this
+// logic (pkg/engine's TestListBackupPoints_IncludesAssistBackups and this
+// package's own TestMergeAdditionalTags) both replicate the tag map by
+// hand rather than exercising this decision.
+func classifyBackupType(
+	previewEnabled bool,
+	snapID, ssid string,
+	failurePolicy control.FailurePolicy,
+	hasNewDetailEntries bool,
+	errs *fault.Bus,
+) (string, error) {
+	switch {
+	case previewEnabled:
+		// Preview backups need to be successful and without errors to be considered
+		// valid. Just reuse the merge base check for that since it has the same
+		// requirements.
+		if !isMergeBackup(snapID, ssid, failurePolicy, errs) {
+			return "", clues.New("failed preview backup")
+		}
+
+		return model.PreviewBackup, nil
+
+	case isMergeBackup(snapID, ssid, failurePolicy, errs):
+		return model.MergeBackup, nil
+
+	case isAssistBackup(hasNewDetailEntries, snapID, ssid, failurePolicy, errs):
+		return model.AssistBackup, nil
+	}
+
+	return "", clues.New("unable to determine backup type due to operation errors")
 }
 
 // ---------------------------------------------------------------------------
@@ -967,44 +1020,28 @@ func (op *BackupOperation) createBackupModels(
 		model.ServiceTag: op.Selectors.PathService().String(),
 	}
 
-	// Add tags to mark this backup as preview, assist, or merge. This is used to:
+	// Add a tag to mark this backup as preview, assist, or merge. This is
+	// used to:
 	// 1. Filter assist backups by tag during base selection process
 	// 2. Differentiate assist backups, merge backups, and preview backups.
 	//
 	// model.BackupTypeTag has more info about how these tags are used.
-	switch {
-	case op.Options.PreviewLimits.Enabled:
-		// Preview backups need to be successful and without errors to be considered
-		// valid. Just reuse the merge base check for that since it has the same
-		// requirements.
-		if !isMergeBackup(
-			snapID,
-			ssid,
-			op.Options.FailureHandling,
-			op.Errors) {
-			return clues.NewWC(ctx, "failed preview backup")
-		}
-
-		tags[model.BackupTypeTag] = model.PreviewBackup
-
-	case isMergeBackup(
+	// classifyBackupType holds the actual decision (extracted so it is
+	// unit-testable on its own - see classify_backup_type_test.go - since
+	// createBackupModels itself needs a real streamstore and model store
+	// to call at all); this just applies its result to tags.
+	backupType, err := classifyBackupType(
+		op.Options.PreviewLimits.Enabled,
 		snapID,
 		ssid,
 		op.Options.FailureHandling,
-		op.Errors):
-		tags[model.BackupTypeTag] = model.MergeBackup
-
-	case isAssistBackup(
 		opStats.hasNewDetailEntries,
-		snapID,
-		ssid,
-		op.Options.FailureHandling,
-		op.Errors):
-		tags[model.BackupTypeTag] = model.AssistBackup
-
-	default:
-		return clues.NewWC(ctx, "unable to determine backup type due to operation errors")
+		op.Errors)
+	if err != nil {
+		return clues.StackWC(ctx, err)
 	}
+
+	tags[model.BackupTypeTag] = backupType
 
 	// Additional defensive check to make sure we tag things as expected above.
 	if len(tags[model.BackupTypeTag]) == 0 {
@@ -1012,6 +1049,8 @@ func (op *BackupOperation) createBackupModels(
 	}
 
 	ctx = clues.Add(ctx, model.BackupTypeTag, tags[model.BackupTypeTag])
+
+	mergeAdditionalTags(tags, op.AdditionalTags)
 
 	b := backup.New(
 		snapID, ssid,
@@ -1033,4 +1072,76 @@ func (op *BackupOperation) createBackupModels(
 	}
 
 	return nil
+}
+
+// reservedAdditionalTagKeys are the tag keys mergeAdditionalTags (below)
+// never lets a caller-supplied tag (op.AdditionalTags) set, independent of
+// whether createBackupModels already populated that key by the time merge
+// runs. Three sources, each duplicated here as a literal because the real
+// constant is unexported in the package that owns it, same as pkg/engine's
+// own copy of this list (tags.go) documents:
+//   - model.ServiceTag, model.BackupTypeTag: this file's own bookkeeping,
+//     already set in tags before merge runs, so these two are also
+//     covered by the "already present" check below - but listed
+//     explicitly so this list is self-sufficient, not relying on call
+//     order elsewhere in this function to protect them.
+//   - manifest.TypeLabelKey ("type"), and "stableID"/"storeVersion":
+//     rejected by Kopia's ModelStore.Put (internal/kopia/model_store.go's
+//     stableIDKey/modelVersionKey), but only after this backup's snapshot
+//     and details have already uploaded - orphaning both.
+//   - "tenant", and the "sc-" prefix: read and written by this fork's own
+//     backup garbage collector (internal/kopia/cleanup_backups.go's
+//     tenantTag/serviceCatTagPrefix) to decide which assist bases survive
+//     collection for a given tenant and category.
+var reservedAdditionalTagKeys = []string{
+	model.ServiceTag,
+	model.BackupTypeTag,
+	manifest.TypeLabelKey,
+	"stableID",
+	"storeVersion",
+	"tenant",
+}
+
+const reservedAdditionalTagPrefix = "sc-"
+
+// mergeAdditionalTags adds every key in additional to tags that tags does
+// not already contain and that is not reserved (reservedAdditionalTagKeys/
+// reservedAdditionalTagPrefix above), mutating tags in place. A key
+// already present in tags - in practice always model.ServiceTag and
+// model.BackupTypeTag, set just above in createBackupModels - is never
+// overwritten; neither is a reserved key, whether or not tags already
+// happens to carry it.
+//
+// This is what stops a caller-supplied tag (pkg/engine.BackupRequest.Tags)
+// from silently colliding with, and corrupting, the fork's own bookkeeping
+// tags that base-selection, Kopia's model store and this fork's garbage
+// collector each depend on. pkg/engine additionally rejects a caller's
+// reserved-key tag outright before a backup ever starts (a better caller
+// experience: a clear error up front, rather than a silently dropped
+// tag); this function is the defense-in-depth backstop for any other
+// caller of AdditionalTags, now or in the future, that skips that check -
+// and, unlike an earlier version of this function and its doc comment, it
+// now actually covers the full reserved set, not just the two keys that
+// happened to already be present in tags by the time it runs.
+func mergeAdditionalTags(tags, additional map[string]string) {
+	reserved := make(map[string]struct{}, len(reservedAdditionalTagKeys))
+	for _, k := range reservedAdditionalTagKeys {
+		reserved[k] = struct{}{}
+	}
+
+	for k, v := range additional {
+		if _, exists := tags[k]; exists {
+			continue
+		}
+
+		if _, isReserved := reserved[k]; isReserved {
+			continue
+		}
+
+		if strings.HasPrefix(k, reservedAdditionalTagPrefix) {
+			continue
+		}
+
+		tags[k] = v
+	}
 }

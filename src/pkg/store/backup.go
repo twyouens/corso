@@ -37,6 +37,34 @@ func Service(pst path.ServiceType) FilterOption {
 	}
 }
 
+// Tags ensures the retrieved backups carry every key/value pair in m, in
+// addition to any other FilterOption supplied in the same call (all
+// FilterOptions narrow the same underlying tag match; see populate). m is
+// copied immediately, at call time, not read lazily when the returned
+// FilterOption is later applied: the caller's map stays entirely theirs to
+// mutate or discard afterwards with no effect on what this filter matches,
+// and the FilterOption value itself is safe to keep and reuse.
+//
+// This is the general-purpose counterpart to Service above: it accepts any
+// caller-defined tag key, including the tenant/policy/object tags
+// pkg/engine's callers use. Backups created through pkg/engine.Backup
+// cannot have a tag here collide with the fork's own ServiceTag or
+// BackupTypeTag - see BackupOperation.AdditionalTags - so combining Tags
+// with Service in the same call is safe and meaningful.
+func Tags(m map[string]string) FilterOption {
+	cp := make(map[string]string, len(m))
+
+	for k, v := range m {
+		cp[k] = v
+	}
+
+	return func(qf *queryFilters) {
+		for k, v := range cp {
+			qf.tags[k] = v
+		}
+	}
+}
+
 type (
 	BackupWrapper interface {
 		BackupGetterDeleter
