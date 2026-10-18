@@ -495,14 +495,14 @@ func TestListItems_ReturnsIDNameSizeAndDates(t *testing.T) {
 	assert.Equal(
 		t,
 		[]string{
-			"k3ep-seed-list",            // no folder: empty folder path sorts first
-			"k3ep-seed-event-001",       // k3ep-seed-calendar
-			"k3ep-seed-contact-001",     // k3ep-seed-contacts
-			"k3ep-seed-mail-001",        // k3ep-seed-mail
-			"k3ep-seed-mail-002",        // k3ep-seed-mail
-			"k3ep-seed-doc-001.txt",     // root: (the library drive)
-			"k3ep-seed-file-001.txt",    // root:/k3ep-seed
-			"k3ep-seed-file-002.txt",    // root:/k3ep-seed
+			"k3ep-seed-list",         // no folder: empty folder path sorts first
+			"k3ep-seed-event-001",    // k3ep-seed-calendar
+			"k3ep-seed-contact-001",  // k3ep-seed-contacts
+			"k3ep-seed-mail-001",     // k3ep-seed-mail
+			"k3ep-seed-mail-002",     // k3ep-seed-mail
+			"k3ep-seed-doc-001.txt",  // root: (the library drive)
+			"k3ep-seed-file-001.txt", // root:/k3ep-seed
+			"k3ep-seed-file-002.txt", // root:/k3ep-seed
 		},
 		itemNames(list.Items),
 		"items must be ordered by folder path, then name, then ID")
@@ -548,6 +548,8 @@ func TestListItems_ReturnsIDNameSizeAndDates(t *testing.T) {
 	// folder - and its name comes from its list info, not ItemName.
 	lst := byName["k3ep-seed-list"]
 	assert.Equal(t, "lists", lst.Category)
+	assert.Equal(t, int64(2), lst.ItemCount,
+		"a list reports how many rows the backup captured inside it, since they are not separate items")
 	assert.Empty(t, lst.FolderID, "a SharePoint list sits outside any folder")
 	assert.Empty(t, lst.FolderPath)
 

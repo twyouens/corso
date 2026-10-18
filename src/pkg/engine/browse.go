@@ -245,6 +245,21 @@ type Item struct {
 	CreatedAt  time.Time
 	ModifiedAt time.Time
 
+	// ItemCount is how many child objects this item itself contains, and
+	// is non-zero only for a SharePoint list (Category "lists").
+	//
+	// It exists because the fork records a whole list as a *single*
+	// backed-up item - one entry carrying the list's name, dates and the
+	// number of list items inside it - rather than one entry per list
+	// item. So a list's own rows are not individually browsable, and not
+	// individually addressable by Item.ID either: the list is the unit
+	// that can be listed here (and, when 5.1 and 7.3 arrive, the unit
+	// they will be handed). This count is the only thing browse can say
+	// about what is inside one, and it is what an admin needs in order to
+	// recognise the list they are looking at. Zero for every other kind
+	// of item, where it means nothing rather than "empty".
+	ItemCount int64
+
 	// Service and Category are as described on Folder.
 	Service  string
 	Category string
@@ -372,7 +387,7 @@ type FoundItem struct {
 	// BackupPointType and BackupPointIndependentlyRestorable describe
 	// that point, so a caller that set AllowIncompletePoints can tell a
 	// hit in a complete point from a hit in a fragment.
-	BackupPointType               BackupPointType
+	BackupPointType                    BackupPointType
 	BackupPointIndependentlyRestorable bool
 
 	// BackupPointCreatedAt is when that backup point was created - the
@@ -785,6 +800,7 @@ func browseEntries(dm details.DetailsModel, backupPointID string) ([]Folder, []I
 			ID:         ent.ShortRef,
 			Name:       itemName(ent.ItemInfo),
 			SizeBytes:  itemSize(ent.ItemInfo),
+			ItemCount:  itemChildCount(ent.ItemInfo),
 			CreatedAt:  itemCreated(ent.ItemInfo),
 			ModifiedAt: ent.ItemInfo.Modified(),
 			Service:    svc,
@@ -944,6 +960,16 @@ func itemSize(info details.ItemInfo) int64 {
 		default:
 			return info.Groups.Size
 		}
+	}
+
+	return 0
+}
+
+// itemChildCount reads how many child objects an item itself contains.
+// Only a SharePoint list has one: see Item.ItemCount.
+func itemChildCount(info details.ItemInfo) int64 {
+	if info.SharePoint != nil && info.SharePoint.List != nil {
+		return info.SharePoint.List.ItemCount
 	}
 
 	return 0
