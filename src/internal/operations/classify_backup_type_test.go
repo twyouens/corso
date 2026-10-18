@@ -1,13 +1,13 @@
 package operations
 
 import (
-	"context"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/twyouens/corso/src/internal/model"
+	"github.com/twyouens/corso/src/internal/tester"
 	"github.com/twyouens/corso/src/pkg/control"
 	"github.com/twyouens/corso/src/pkg/fault"
 )
@@ -32,7 +32,8 @@ import (
 // preview mode both succeeding and failing its own merge-equivalent
 // check.
 func TestClassifyBackupType(t *testing.T) {
-	ctx := context.Background()
+	ctx, flush := tester.NewContext(t)
+	defer flush()
 
 	table := []struct {
 		name           string

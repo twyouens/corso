@@ -35,11 +35,17 @@ func TestCloneTags(t *testing.T) {
 func TestToBackupPoint(t *testing.T) {
 	now := time.Now().UTC()
 
+	tags := map[string]string{
+		"k3ep-tenant":       "t1",
+		model.ServiceTag:    "exchange",
+		model.BackupTypeTag: model.MergeBackup,
+	}
+
 	b := &backup.Backup{
 		BaseModel: model.BaseModel{
 			ID:           model.StableID(uuid.NewString()),
 			ModelStoreID: manifest.ID(uuid.NewString()),
-			Tags:         map[string]string{"k3ep-tenant": "t1", model.ServiceTag: "exchange", model.BackupTypeTag: model.MergeBackup},
+			Tags:         tags,
 		},
 		CreationTime: now,
 		Version:      version.Backup,

@@ -159,7 +159,7 @@ func TestRepositoryConfig_NeverLeaksCredentials(t *testing.T) {
 		ctx, flush := tester.NewContext(t)
 		defer flush()
 
-		err := clues.WithClues(clues.New("boom").With("config", cfg), ctx)
+		err := clues.NewWC(ctx, "boom").With("config", cfg)
 		core := clues.ToCore(err)
 
 		assertNoSecrets(t, "clues ErrCore.String()", core.String())
