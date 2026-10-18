@@ -5,7 +5,6 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 
 	"github.com/twyouens/corso/src/pkg/control/repository"
 	"github.com/twyouens/corso/src/pkg/credentials"
@@ -42,12 +41,24 @@ func TestS3BlobStorage_RefusesCredentialLessConfig(t *testing.T) {
 		name      string
 		accessKey string
 		secretKey string
+		// forgedKey, when set, is a spelling of the opt-out key chunk
+		// 0.6's security reviewer forged into the config map. No
+		// spelling may mean anything now that the capability is gone.
+		forgedKey string
 	}{
-		{"both missing", "", ""},
-		{"access key missing", "", "secret"},
-		{"secret key missing", "access", ""},
-		{"access key whitespace only", " ", "secret"},
-		{"secret key whitespace only", "access", "\t"},
+		{name: "both missing"},
+		{name: "access key missing", secretKey: "secret"},
+		{name: "secret key missing", accessKey: "access"},
+		{name: "access key whitespace only", accessKey: " ", secretKey: "secret"},
+		{name: "secret key whitespace only", accessKey: "access", secretKey: "\t"},
+		{name: "forged opt-out key, snake", forgedKey: "s3_allow_ambient_credentials"},
+		{name: "forged opt-out key, camel", forgedKey: "s3AllowAmbientCredentials"},
+		{name: "forged opt-out key, upper", forgedKey: "S3_ALLOW_AMBIENT_CREDENTIALS"},
+		{name: "forged opt-out key, mixed", forgedKey: "S3_Allow_Ambient_Credentials"},
+		{name: "forged opt-out key, unprefixed", forgedKey: "allow_ambient_credentials"},
+		{name: "forged opt-out key, go field name", forgedKey: "AllowAmbientCredentials"},
+		{name: "forged opt-out key, leading space", forgedKey: " s3_allow_ambient_credentials"},
+		{name: "forged opt-out key, trailing space", forgedKey: "s3_allow_ambient_credentials "},
 	}
 	for _, test := range table {
 		t.Run(test.name, func(t *testing.T) {
@@ -62,10 +73,20 @@ func TestS3BlobStorage_RefusesCredentialLessConfig(t *testing.T) {
 				},
 			}
 
+			if len(test.forgedKey) > 0 {
+				st.Config[test.forgedKey] = "true"
+			}
+
+			// Deliberately assert, not require: the recorder assertions
+			// after this loop are what observe a request escaping to the
+			// endpoint, and a FailNow here would stop them being
+			// reached in exactly the case that matters.
 			store, err := s3BlobStorage(ctx, repository.Options{}, st)
-			require.Error(t, err, "S3 blob storage must refuse a config without explicit credentials")
+			if assert.Error(t, err, "S3 blob storage must refuse a config without explicit credentials") {
+				assert.Contains(t, err.Error(), "missing required storage configuration")
+			}
+
 			assert.Nil(t, store)
-			assert.Contains(t, err.Error(), "missing required storage configuration")
 		})
 	}
 

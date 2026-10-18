@@ -138,17 +138,23 @@ func TestS3CredentialLessConfigNeverReachesAnEndpoint(t *testing.T) {
 			ctx := context.Background()
 			st := credentialLessStorage(t, rec.Endpoint, spelling)
 
-			// the storage layer refuses to derive an S3 config at all
+			// The storage layer refuses to derive an S3 config at all.
+			// Deliberately assert, not require: if this ever stops
+			// holding, the subtests below must still run, because they
+			// are the ones that would observe a request reaching the
+			// recorder. A require here would mask exactly the regression
+			// this test exists to catch.
 			_, err := st.ToS3Config()
-			require.Error(t, err, "a credential-less config map must not produce an S3Config")
-			assert.Contains(t, err.Error(), "accessKey")
+			if assert.Error(t, err, "a credential-less config map must not produce an S3Config") {
+				assert.Contains(t, err.Error(), "accessKey")
+			}
 
 			t.Run("initialize", func(t *testing.T) {
 				r, err := New(ctx, account.Account{}, st, control.DefaultOptions(), NewRepoID)
 				require.NoError(t, err, clues.ToCore(err))
 
 				err = r.Initialize(ctx, InitConfig{})
-				require.Error(t, err, "a credential-less config must not initialize a repository")
+				assert.Error(t, err, "a credential-less config must not initialize a repository")
 			})
 
 			t.Run("config filename hash", func(t *testing.T) {
@@ -156,8 +162,9 @@ func TestS3CredentialLessConfigNeverReachesAnEndpoint(t *testing.T) {
 				require.NoError(t, err, clues.ToCore(err))
 
 				_, err = r.GenerateHashForRepositoryConfigFileName()
-				require.Error(t, err, "the connect path's config filename must not be derivable")
-				assert.Contains(t, err.Error(), "accessKey")
+				if assert.Error(t, err, "the connect path's config filename must not be derivable") {
+					assert.Contains(t, err.Error(), "accessKey")
+				}
 			})
 
 			t.Run("update password", func(t *testing.T) {
@@ -165,7 +172,7 @@ func TestS3CredentialLessConfigNeverReachesAnEndpoint(t *testing.T) {
 				require.NoError(t, err, clues.ToCore(err))
 
 				err = r.UpdatePassword(ctx, "a-new-passphrase")
-				require.Error(t, err, "a credential-less config must not reach kopia's S3 client")
+				assert.Error(t, err, "a credential-less config must not reach kopia's S3 client")
 			})
 		})
 	}
