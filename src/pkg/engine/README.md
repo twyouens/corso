@@ -572,7 +572,7 @@ report the gap. `res.Items` holds every match from the points that *were*
 readable; that is still useful, as long as nobody mistakes it for the whole
 answer.
 
-### 4.6 Graph concurrency is per client, at most four in flight, and never shared
+### 4.6 Graph concurrency is per client, at most four in flight per client, and never shared
 
 Every Microsoft Graph client this engine builds carries its own concurrency
 limiter. The capacity is a property of that client, taken from the
@@ -598,17 +598,29 @@ and `control.DefaultOptions()` is 4.
   Requester, a third client used for arbitrary URLs and large content
   downloads, is not limited at all (below). Size a worker from 8 per
   repository, not 4.
+- **8 is a floor, not a ceiling, during a SharePoint Pages backup.** Backing up
+  `path.PagesCategory` builds one more limited client for each Pages scope
+  (`internal/m365/collection/site/backup.go`'s `CollectPages`, which calls
+  `graph.CreateAdapter` with no options). It gets its own semaphore at **4
+  regardless of the repository's `ItemFetch`**, so a repository opened with
+  `ItemFetch: 1` does not narrow it: such a backup can have 1 + 1 + 4 Graph
+  requests in flight, and one at the default 4 + 4 + 4. This was true in v0.1.0
+  too, but there it was absorbed into the single process-wide semaphore; per
+  client, it adds.
 - **A process's total in-flight Graph requests therefore scale with the number
   of repositories**, not with a single process-wide ceiling: N tenants backing
-  up concurrently get 2N independent limiters. The engine does not, and cannot,
-  cap the process total.
+  up concurrently get at least 2N independent limiters, more while any of them
+  is backing up SharePoint Pages. The engine does not, and cannot, cap the
+  process total.
 
 What k3ep must do: size a worker by goroutine, not by process; treat
 `Options.Parallelism.ItemFetch` as a per-repository setting that takes effect
 for that repository; and when planning capacity, count **two** limiters of
 that width per open repository plus an unlimited content-download client, not
-one. Do not assume a process-wide ceiling exists, because none does - if a worker needs to bound its own total Graph pressure across
-many tenants, that bound belongs in k3ep, above this API.
+one - and a third, always at 4, for each SharePoint Pages scope a backup
+includes. Do not assume a process-wide ceiling exists, because none does - if
+a worker needs to bound its own total Graph pressure across many tenants, that
+bound belongs in k3ep, above this API.
 
 Two limits this does **not** change, both of which remain process-wide and
 neither of which this engine exposes:
