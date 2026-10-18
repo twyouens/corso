@@ -38,6 +38,17 @@ type S3Config struct {
 	// supported running under a human's or CI job's own AWS identity with
 	// no explicit keys, and that must keep working. No other caller in
 	// this fork sets it; pkg/engine, specifically, never does.
+	//
+	// Deliberately a Go field only, never serialised to or read back from
+	// the Config map (StringConfig/buildS3ConfigFromMap): a review found
+	// that round-tripping it let a hand-built or rehydrated map carry the
+	// flag set with no credentials, re-enabling the platform's ambient AWS
+	// identity through any caller that can construct a map - proven live
+	// through pkg/repository.Initialize, even though pkg/engine's own
+	// validateStorageCredentials rejected the same forged map outright.
+	// ApplyConfigOverrides sets this directly on the struct the CLI owns,
+	// never through the map, so the CLI keeps working and no map, however
+	// constructed, can carry this opt-in.
 	AllowAmbientCredentials bool
 }
 
@@ -52,15 +63,14 @@ var excludedS3ConfigFieldsForHashing = []string{
 
 // config key consts
 const (
-	keyS3AccessKey               = "s3_access_key"
-	keyS3Bucket                  = "s3_bucket"
-	keyS3Endpoint                = "s3_endpoint"
-	keyS3Prefix                  = "s3_prefix"
-	keyS3SecretKey               = "s3_secret_key"
-	keyS3SessionToken            = "s3_session_token"
-	keyS3DoNotUseTLS             = "s3_donotusetls"
-	keyS3DoNotVerifyTLS          = "s3_donotverifytls"
-	keyS3AllowAmbientCredentials = "s3_allow_ambient_credentials"
+	keyS3AccessKey      = "s3_access_key"
+	keyS3Bucket         = "s3_bucket"
+	keyS3Endpoint       = "s3_endpoint"
+	keyS3Prefix         = "s3_prefix"
+	keyS3SecretKey      = "s3_secret_key"
+	keyS3SessionToken   = "s3_session_token"
+	keyS3DoNotUseTLS    = "s3_donotusetls"
+	keyS3DoNotVerifyTLS = "s3_donotverifytls"
 )
 
 // config exported name consts
@@ -112,7 +122,8 @@ func buildS3ConfigFromMap(config map[string]string) (*S3Config, error) {
 		c.Prefix = orEmptyString(config[keyS3Prefix])
 		c.DoNotUseTLS = str.ParseBool(config[keyS3DoNotUseTLS])
 		c.DoNotVerifyTLS = str.ParseBool(config[keyS3DoNotVerifyTLS])
-		c.AllowAmbientCredentials = str.ParseBool(config[keyS3AllowAmbientCredentials])
+		// AllowAmbientCredentials is deliberately never read from this map -
+		// see its doc comment on the struct field above.
 	}
 
 	return c, c.validate()
@@ -133,18 +144,26 @@ func (c *S3Config) normalize() S3Config {
 // StringConfig transforms a s3Config struct into a plain
 // map[string]string.  All values in the original struct which
 // serialize into the map are expected to be strings.
+//
+// AllowAmbientCredentials is deliberately never written here - see its
+// doc comment on the struct field above: a map is exactly the shape a
+// caller (or a rehydrated config) could hand back to buildS3ConfigFromMap
+// to re-derive an S3Config, so writing the flag into it would let that
+// round trip silently re-enable the ambient AWS identity this field
+// exists to gate. Keeping it a Go-only field means the only way to set
+// it is in code that holds a *S3Config directly - ApplyConfigOverrides,
+// and nothing else in this fork.
 func (c *S3Config) StringConfig() (map[string]string, error) {
 	cn := c.normalize()
 	cfg := map[string]string{
-		keyS3AccessKey:               c.AccessKey,
-		keyS3Bucket:                  cn.Bucket,
-		keyS3Endpoint:                cn.Endpoint,
-		keyS3Prefix:                  cn.Prefix,
-		keyS3SecretKey:               c.SecretKey,
-		keyS3SessionToken:            c.SessionToken,
-		keyS3DoNotUseTLS:             strconv.FormatBool(cn.DoNotUseTLS),
-		keyS3DoNotVerifyTLS:          strconv.FormatBool(cn.DoNotVerifyTLS),
-		keyS3AllowAmbientCredentials: strconv.FormatBool(cn.AllowAmbientCredentials),
+		keyS3AccessKey:      c.AccessKey,
+		keyS3Bucket:         cn.Bucket,
+		keyS3Endpoint:       cn.Endpoint,
+		keyS3Prefix:         cn.Prefix,
+		keyS3SecretKey:      c.SecretKey,
+		keyS3SessionToken:   c.SessionToken,
+		keyS3DoNotUseTLS:    strconv.FormatBool(cn.DoNotUseTLS),
+		keyS3DoNotVerifyTLS: strconv.FormatBool(cn.DoNotVerifyTLS),
 	}
 
 	return cfg, cn.validate()

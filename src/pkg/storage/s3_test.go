@@ -31,15 +31,14 @@ var (
 	}
 
 	goodS3Map = map[string]string{
-		keyS3Bucket:                  "bkt",
-		keyS3Endpoint:                "end",
-		keyS3Prefix:                  "pre/",
-		keyS3DoNotUseTLS:             "false",
-		keyS3DoNotVerifyTLS:          "false",
-		keyS3AccessKey:               "access",
-		keyS3SecretKey:               "secret",
-		keyS3SessionToken:            "token",
-		keyS3AllowAmbientCredentials: "false",
+		keyS3Bucket:         "bkt",
+		keyS3Endpoint:       "end",
+		keyS3Prefix:         "pre/",
+		keyS3DoNotUseTLS:    "false",
+		keyS3DoNotVerifyTLS: "false",
+		keyS3AccessKey:      "access",
+		keyS3SecretKey:      "secret",
+		keyS3SessionToken:   "token",
 	}
 )
 
@@ -164,15 +163,14 @@ func (suite *S3CfgUnitSuite) TestStorage_S3Config_StringConfig() {
 				AWS: credentials.AWS{AccessKey: "access", SecretKey: "secret"},
 			},
 			expect: map[string]string{
-				keyS3Bucket:                  "bkt",
-				keyS3Endpoint:                "end",
-				keyS3Prefix:                  "pre/",
-				keyS3DoNotUseTLS:             "true",
-				keyS3DoNotVerifyTLS:          "true",
-				keyS3AccessKey:               "access",
-				keyS3SecretKey:               "secret",
-				keyS3SessionToken:            "",
-				keyS3AllowAmbientCredentials: "false",
+				keyS3Bucket:         "bkt",
+				keyS3Endpoint:       "end",
+				keyS3Prefix:         "pre/",
+				keyS3DoNotUseTLS:    "true",
+				keyS3DoNotVerifyTLS: "true",
+				keyS3AccessKey:      "access",
+				keyS3SecretKey:      "secret",
+				keyS3SessionToken:   "",
 			},
 		},
 	}
@@ -254,4 +252,38 @@ func (suite *S3CfgUnitSuite) TestS3Config_Validate_RejectsBlankCredentialsByDefa
 
 	withCreds := S3Config{Bucket: "bkt", AWS: credentials.AWS{AccessKey: "a", SecretKey: "b"}}
 	assert.NoError(t, withCreds.validate())
+}
+
+// TestBuildS3ConfigFromMap_IgnoresAllowAmbientCredentialsKey proves chunk
+// 0.6's review round-4 fix: a security review found that
+// AllowAmbientCredentials round-tripped through the exported Config map
+// (StringConfig wrote it, buildS3ConfigFromMap read it back), so a
+// hand-built or rehydrated map carrying the flag set and no credentials
+// passed ToS3Config/validate - reaching Kopia's S3 client with the
+// platform's ambient AWS identity rather than a caller-supplied one,
+// confirmed live through pkg/repository.Initialize even though
+// pkg/engine's own validateStorageCredentials rejected the identical
+// forged map outright.
+//
+// AllowAmbientCredentials is now a Go-only field, never serialised to or
+// read back from the map. This test builds exactly the forged map a prior
+// version of buildS3ConfigFromMap would have honoured - bucket only, no
+// credentials, the ambient-credentials key set true - and asserts it
+// still fails validation: the key is inert from this map's perspective,
+// and the only way to set the real field is to hold a *S3Config directly
+// (ApplyConfigOverrides, and nothing else in this fork).
+func (suite *S3CfgUnitSuite) TestBuildS3ConfigFromMap_IgnoresAllowAmbientCredentialsKey() {
+	t := suite.T()
+
+	forged := map[string]string{
+		keyS3Bucket:                    "bkt",
+		"s3_allow_ambient_credentials": "true",
+	}
+
+	cfg, err := buildS3ConfigFromMap(forged)
+	require.Error(t, err, "a credential-less map must still fail validation "+
+		"regardless of any ambient-credentials key it carries")
+	require.NotNil(t, cfg)
+	assert.False(t, cfg.AllowAmbientCredentials,
+		"the forged key must never be read back into the struct field")
 }
