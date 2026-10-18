@@ -50,11 +50,14 @@ func TestRepositoryConfig_NeverLeaksCredentials(t *testing.T) {
 
 	secrets := []string{secretPassphrase, secretClientSecret, secretAccessKey, secretSecretKey}
 
+	//lint:ignore S1025 deliberately exercising the %s verb through fmt.Sprintf, not calling String() directly
+	sVerbOutput := fmt.Sprintf("%s", cfg) //nolint:staticcheck // deliberately exercising the %s verb through fmt.Sprintf
+
 	outputs := map[string]string{
 		"%v":       fmt.Sprintf("%v", cfg),
 		"%+v":      fmt.Sprintf("%+v", cfg),
 		"%#v":      fmt.Sprintf("%#v", cfg),
-		"%s":       fmt.Sprintf("%s", cfg), //nolint:gosimple // deliberately exercising this verb
+		"%s":       sVerbOutput,
 		"String()": cfg.String(),
 	}
 

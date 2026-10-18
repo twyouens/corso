@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/twyouens/corso/src/internal/model"
+	"github.com/twyouens/corso/src/internal/tester"
 	"github.com/twyouens/corso/src/pkg/backup"
 	"github.com/twyouens/corso/src/pkg/repository"
 	"github.com/twyouens/corso/src/pkg/store"
@@ -87,7 +88,8 @@ func backupWithTags(tags map[string]string) *backup.Backup {
 // proves the lower layer but not that engine.Repository actually calls
 // it.
 func TestListBackupPoints_IncludesAssistBackups(t *testing.T) {
-	ctx := context.Background()
+	ctx, flush := tester.NewContext(t)
+	defer flush()
 
 	assist := backupWithTags(map[string]string{model.BackupTypeTag: model.AssistBackup, "k3ep-object": "o1"})
 	merge := backupWithTags(map[string]string{model.BackupTypeTag: model.MergeBackup, "k3ep-object": "o1"})
@@ -112,7 +114,8 @@ func TestListBackupPoints_IncludesAssistBackups(t *testing.T) {
 // ID, not just a count a caller could not turn into an AUD-1 audit event
 // without a separate, racy list-then-delete round trip.
 func TestDeleteBackupPoints_DeletesAssistBackupsAndReturnsIDs(t *testing.T) {
-	ctx := context.Background()
+	ctx, flush := tester.NewContext(t)
+	defer flush()
 
 	assist := backupWithTags(map[string]string{model.BackupTypeTag: model.AssistBackup, "k3ep-object": "o1"})
 

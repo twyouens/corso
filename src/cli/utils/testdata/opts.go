@@ -1008,6 +1008,13 @@ func (MockBackupGetter) BackupsByTag(
 	return nil, clues.New("unexpected call to mock")
 }
 
+func (MockBackupGetter) AllBackupsByTag(
+	context.Context,
+	...store.FilterOption,
+) ([]*backup.Backup, error) {
+	return nil, clues.New("unexpected call to mock")
+}
+
 func (bg *MockBackupGetter) GetBackupDetails(
 	ctx context.Context,
 	backupID string,
