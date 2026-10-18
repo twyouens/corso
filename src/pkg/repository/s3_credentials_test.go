@@ -183,4 +183,36 @@ func TestS3CredentialLessConfigNeverReachesAnEndpoint(t *testing.T) {
 	// own side rather than from the code under test
 	assert.Empty(t, rec.Requests(), "no request may reach a caller-named S3 endpoint")
 	assert.False(t, rec.SawAuthorization(), "nothing may sign a request with any credential")
+
+	// The positive control, on its own recorder, and the reason the two
+	// assertions above mean anything: the same route, with *explicit*
+	// credentials, does reach the endpoint and does sign what it sends.
+	// Without this, "zero requests" would be equally consistent with an
+	// instrument that can never see a request at all.
+	t.Run("positive control: explicit credentials do reach the endpoint", func(t *testing.T) {
+		ctx, flush := tester.NewContext(t)
+		defer flush()
+
+		ctrl := storeTD.NewS3RequestRecorder(t)
+
+		st := credentialLessStorage(t, ctrl.Endpoint, "")
+		st.Config["s3_access_key"] = "explicit-access-key"
+		st.Config["s3_secret_key"] = "explicit-secret-key"
+
+		r, err := New(ctx, fakeM365Account(t), st, control.DefaultOptions(), NewRepoID)
+		require.NoError(t, err, clues.ToCore(err))
+
+		hash, err := r.GenerateHashForRepositoryConfigFileName()
+		require.NoError(t, err, clues.ToCore(err))
+		assert.NotEmpty(t, hash)
+
+		// errors, because the recorder is not an S3 server - but only
+		// after having tried, which is the point
+		err = r.UpdatePassword(ctx, "a-new-passphrase")
+		assert.Error(t, err)
+
+		assert.NotEmpty(t, ctrl.Requests(), "the recorder must be able to see a request at all")
+		assert.True(t, ctrl.SawAuthorization(),
+			"an explicit-credential request is signed; that is what the credential-less cases must not do")
+	})
 }
