@@ -191,6 +191,14 @@ type clientConfig struct {
 	// so it is always between 1 and maxConcurrentRequests inclusive and is
 	// never zero, even for a clientConfig nobody passed options to.
 	concurrencyLimit int
+	// installedConcurrencyLimiter is the limiter kiotaMiddlewares actually
+	// built for this client, recorded so ConcurrencyLimit() can report the
+	// capacity of the semaphore requests really pass through rather than the
+	// capacity that was asked for.  Those two can only differ if something
+	// goes wrong, which is exactly why the reported value is taken from the
+	// installed limiter: a test that reads the requested value cannot tell
+	// whether the request was honoured.
+	installedConcurrencyLimiter *concurrencyLimiterMiddleware
 
 	appendMiddleware []khttp.Middleware
 }
@@ -349,7 +357,9 @@ func kiotaMiddlewares(
 	// decide another's.  populateConfig defaults concurrencyLimit to
 	// maxConcurrentRequests, so even a zero-value clientConfig produces a
 	// usable semaphore rather than a nil one.
-	mw = append(mw, generateConcurrencyLimiter(cc.concurrencyLimit))
+	limiter := generateConcurrencyLimiter(cc.concurrencyLimit)
+	cc.installedConcurrencyLimiter = limiter
+	mw = append(mw, limiter)
 
 	throttler := &throttlingMiddleware{
 		tf:      newTimedFence(),
@@ -404,8 +414,12 @@ func wrapAdapter(gra *msgraphsdkgo.GraphRequestAdapter, cc *clientConfig) *adapt
 }
 
 // ConcurrencyLimit reports the number of Graph requests this adapter's client
-// may have in flight at the same time: the effective, clamped capacity of the
-// concurrency limiter kiotaMiddlewares installed for this client and no other.
+// may have in flight at the same time, read from the capacity of the
+// semaphore in the concurrency limiter kiotaMiddlewares installed for this
+// client and no other.  It is the installed capacity, not the requested one,
+// so a caller cannot be told the limit it asked for while requests pass
+// through a different - or shared, or absent - semaphore.  A client with no
+// limiter installed reports 0, which no clamped capacity ever is.
 //
 // adapterWrap is unexported, so this is only reachable by asserting the
 // abstractions.RequestAdapter returned by CreateAdapter (or held by a
@@ -415,7 +429,11 @@ func wrapAdapter(gra *msgraphsdkgo.GraphRequestAdapter, cc *clientConfig) *adapt
 // the capacity being per client; nothing in this fork's non-test code reads
 // it.
 func (aw *adapterWrap) ConcurrencyLimit() int {
-	return aw.config.concurrencyLimit
+	if aw.config == nil || aw.config.installedConcurrencyLimiter == nil {
+		return 0
+	}
+
+	return cap(aw.config.installedConcurrencyLimiter.semaphore)
 }
 
 // Graph may abruptly close connections, which we should retry.
