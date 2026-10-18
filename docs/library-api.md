@@ -55,6 +55,43 @@ Upgrading later is the same command with a later version. The fork is Apache
 2.0 and the repository is public, so no `GOPRIVATE` or credential setup is
 needed.
 
+### Cutting a release (for whoever does the tagging)
+
+Two different strings are involved, and conflating them is the one mistake that
+is expensive to undo:
+
+| | Value |
+| --- | --- |
+| git tag that must exist | `src/v0.1.0` |
+| module version Go resolves it as | `v0.1.0` |
+| command a consumer runs | `go get github.com/twyouens/corso/src@v0.1.0` |
+
+They differ because the module is defined in the repository's `src/`
+subdirectory. Go's own module reference puts it plainly: the module
+subdirectory "also serves as a prefix for semantic version tags". A bare
+`v0.1.0` tag is therefore not a version of `github.com/twyouens/corso/src` at
+all — Go ignores it, and `go get …@v0.1.0` fails to resolve. (`v0.1` is not a
+valid module version either: major, minor and patch are all required.)
+
+The order matters, and so does the care:
+
+1. Merge the release's pull request and wait for CI to be **green on `main`**.
+   The tag has to point at the released commit, so nothing is tagged before
+   then.
+2. Tag that merge commit — `src/v0.1.0` — and push the tag. **A human does
+   this; it is deliberately not an agent's job.**
+3. Only then can k3ep run the `go get` line above.
+
+**A published module version is effectively impossible to withdraw.** Once
+`proxy.golang.org` has served a version it keeps serving it — the mirror's own
+FAQ says it "aims to cache content in order to avoid breaking builds for people
+that depend on your package, so this bad release may still be available in the
+mirror even if it is not available at the origin" — and the checksum database
+has already recorded that version's hash, so re-pointing the tag at a different
+commit gives every later consumer a checksum mismatch rather than the new code.
+The supported remedy for a bad release is a `retract` directive plus a *new*
+version, never a deleted or moved tag. Which is why this step is done slowly.
+
 ## 2. Local development across both repositories (`go.work`)
 
 A Go workspace lets a k3ep change and an engine change be developed together,

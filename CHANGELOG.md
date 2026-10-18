@@ -17,6 +17,12 @@ lives in this repository's `src/` subdirectory, so its version tags carry that
 prefix, and Go resolves it as module version `v0.1.0`. A consumer pins it with
 `go get github.com/twyouens/corso/src@v0.1.0`, which records the pin in the
 consumer's own `go.mod`/`go.sum`; no `replace` directive is needed or wanted.
+Note that the git tag and the module version are deliberately different
+strings - `src/v0.1.0` and `v0.1.0` - because the module lives in a
+subdirectory; a bare `v0.1.0` tag would not be a version of this module at
+all. The tag is created by a human, on the release commit, only once CI is
+green on `main`, because a published module version cannot cleanly be
+withdrawn afterwards.
 The guide for library callers is [`docs/library-api.md`](docs/library-api.md),
 which also covers local development across both repositories with a Go
 workspace and the `GOWORK=off go build ./... && GOWORK=off go test ./...` check
