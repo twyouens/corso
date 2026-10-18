@@ -197,6 +197,46 @@ func isMergeBackup(
 	return len(err.Recovered()) == 0
 }
 
+// classifyBackupType decides which of model.PreviewBackup/MergeBackup/
+// AssistBackup a backup's tags should carry, or returns an error if it
+// fits none of them - the exact logic createBackupModels applies to
+// tags[model.BackupTypeTag], extracted into its own function purely so it
+// is unit-testable without createBackupModels' streamstore and model
+// store dependencies (see classify_backup_type_test.go). Nobody had
+// proven, before that test, that a live partial failure actually produces
+// model.AssistBackup rather than some other value or a classification
+// that silently stops happening - the two existing tests nearest this
+// logic (pkg/engine's TestListBackupPoints_IncludesAssistBackups and this
+// package's own TestMergeAdditionalTags) both replicate the tag map by
+// hand rather than exercising this decision.
+func classifyBackupType(
+	previewEnabled bool,
+	snapID, ssid string,
+	failurePolicy control.FailurePolicy,
+	hasNewDetailEntries bool,
+	errs *fault.Bus,
+) (string, error) {
+	switch {
+	case previewEnabled:
+		// Preview backups need to be successful and without errors to be considered
+		// valid. Just reuse the merge base check for that since it has the same
+		// requirements.
+		if !isMergeBackup(snapID, ssid, failurePolicy, errs) {
+			return "", clues.New("failed preview backup")
+		}
+
+		return model.PreviewBackup, nil
+
+	case isMergeBackup(snapID, ssid, failurePolicy, errs):
+		return model.MergeBackup, nil
+
+	case isAssistBackup(hasNewDetailEntries, snapID, ssid, failurePolicy, errs):
+		return model.AssistBackup, nil
+	}
+
+	return "", clues.New("unable to determine backup type due to operation errors")
+}
+
 // ---------------------------------------------------------------------------
 // Primary Controller
 // ---------------------------------------------------------------------------
@@ -980,44 +1020,28 @@ func (op *BackupOperation) createBackupModels(
 		model.ServiceTag: op.Selectors.PathService().String(),
 	}
 
-	// Add tags to mark this backup as preview, assist, or merge. This is used to:
+	// Add a tag to mark this backup as preview, assist, or merge. This is
+	// used to:
 	// 1. Filter assist backups by tag during base selection process
 	// 2. Differentiate assist backups, merge backups, and preview backups.
 	//
 	// model.BackupTypeTag has more info about how these tags are used.
-	switch {
-	case op.Options.PreviewLimits.Enabled:
-		// Preview backups need to be successful and without errors to be considered
-		// valid. Just reuse the merge base check for that since it has the same
-		// requirements.
-		if !isMergeBackup(
-			snapID,
-			ssid,
-			op.Options.FailureHandling,
-			op.Errors) {
-			return clues.NewWC(ctx, "failed preview backup")
-		}
-
-		tags[model.BackupTypeTag] = model.PreviewBackup
-
-	case isMergeBackup(
+	// classifyBackupType holds the actual decision (extracted so it is
+	// unit-testable on its own - see classify_backup_type_test.go - since
+	// createBackupModels itself needs a real streamstore and model store
+	// to call at all); this just applies its result to tags.
+	backupType, err := classifyBackupType(
+		op.Options.PreviewLimits.Enabled,
 		snapID,
 		ssid,
 		op.Options.FailureHandling,
-		op.Errors):
-		tags[model.BackupTypeTag] = model.MergeBackup
-
-	case isAssistBackup(
 		opStats.hasNewDetailEntries,
-		snapID,
-		ssid,
-		op.Options.FailureHandling,
-		op.Errors):
-		tags[model.BackupTypeTag] = model.AssistBackup
-
-	default:
-		return clues.NewWC(ctx, "unable to determine backup type due to operation errors")
+		op.Errors)
+	if err != nil {
+		return clues.StackWC(ctx, err)
 	}
+
+	tags[model.BackupTypeTag] = backupType
 
 	// Additional defensive check to make sure we tag things as expected above.
 	if len(tags[model.BackupTypeTag]) == 0 {
