@@ -23,7 +23,7 @@ subdirectory; a bare `v0.1.0` tag would not be a version of this module at
 all. The tag is created by a human, on the release commit, only once CI is
 green on `main`, because a published module version cannot cleanly be
 withdrawn afterwards.
-The guide for library callers is [`docs/library-api.md`](docs/library-api.md),
+The guide for library callers is [`src/pkg/engine/README.md`](src/pkg/engine/README.md),
 which also covers local development across both repositories with a Go
 workspace and the `GOWORK=off go build ./... && GOWORK=off go test ./...` check
 every pull request has to pass without one.
@@ -49,6 +49,11 @@ comparable to this one.
 - **A library, not an application.** `pkg/engine` reads no environment
   variable, configuration file or flag, never writes to stdout, and reports
   progress only through the caller's callback. The caller supplies everything.
+  One transitive exception, documented rather than glossed: on a context with
+  no logger seeded, the fork's own logger singleton reads `CORSO_LOG_FILE` (or
+  `$HOME`/`$LOCALAPPDATA`/`$XDG_CACHE_HOME`) and creates a log directory under
+  the process user's home, with PII handling defaulting to plaintext. Configure
+  a logger before the first engine call.
 - **Browse without Graph.** The folder tree, item listings and name search read
   only a backup point's own details manifest: no Microsoft Graph call, no item
   content fetched or decrypted. A mailbox that no longer exists in Microsoft
@@ -104,10 +109,10 @@ comparable to this one.
 
 The eleven operational facts a library caller has to know - including the ones
 above - are set out, with what to do about each, in
-[`docs/library-api.md`](docs/library-api.md) section 4.
+[`src/pkg/engine/README.md`](src/pkg/engine/README.md) section 4.
 
 ### Added
-- Added [`docs/library-api.md`](docs/library-api.md), the guide for a consumer writing against `pkg/engine`: the call shape for each capability, the eleven operational facts a caller has to know (tags are not an authorisation boundary; the namespaced tag keys and the reserved ones; assist and preview points in every listing and only merge points restorable; `(BackupPointID, Item.ID)` as the durable item handle; `FindItemsResult.UnreadableBackupPointIDs` as a partial-result signal; the process-global Graph concurrency clamp; explicit-credentials-only S3; redaction covering `fmt`/`json`/`slog`/`zap`/`clues` but not YAML or `encoding/gob`; server-side derivation of storage location and credentials; a SharePoint list as a single item; and the library reading no environment variable, file or flag), the `go.work` and `GOWORK=off` instructions for local development across both repositories, the `go get` line that pins a release, and a recipe for re-proving the public surface from an out-of-module build. Added `src/pkg/engine/example_test.go`, a compiled godoc example per capability area (no `Output:` comment, so they are compiled and never run), which is where every snippet in the guide comes from; and `src/pkg/engine/docs_test.go`'s `TestLibraryAPIDoc_MatchesExportedSurface`, which fails if the guide names an `engine.Symbol` or a `Type.Member` that does not exist, or if an exported top-level declaration is named nowhere in the guide.
+- Added [`src/pkg/engine/README.md`](src/pkg/engine/README.md) (with a pointer left at `docs/library-api.md`), the guide for a consumer writing against `pkg/engine`: the call shape for each capability, the eleven operational facts a caller has to know (tags are not an authorisation boundary; the namespaced tag keys and the reserved ones; assist and preview points in every listing and only merge points restorable; `(BackupPointID, Item.ID)` as the durable item handle; `FindItemsResult.UnreadableBackupPointIDs` as a partial-result signal; the process-global Graph concurrency clamp; explicit-credentials-only S3; redaction covering `fmt`/`json`/`slog`/`zap`/`clues` but not YAML or `encoding/gob`; server-side derivation of storage location and credentials; a SharePoint list as a single item; and the library reading no environment variable, file or flag), the `go.work` and `GOWORK=off` instructions for local development across both repositories, the `go get` line that pins a release, and a recipe for re-proving the public surface from an out-of-module build. Added `src/pkg/engine/example_test.go`, a compiled godoc example per capability area (no `Output:` comment, so they are compiled and never run), which is where every snippet in the guide comes from; and `src/pkg/engine/docs_test.go`'s `TestLibraryAPIDoc_MatchesExportedSurface`, which fails if the guide names an `engine.Symbol` or a `Type.Member` that does not exist, or if an exported top-level declaration is named nowhere in the guide.
 - Audited the Alcion Kopia fork pinned in `src/go.mod` against its upstream base; see `docs/kopia-fork-audit.md` for the fork-only dependency inventory and the recommendation to move to current upstream Kopia.
 - Renamed the Go module path from `github.com/alcionai/corso/src` to `github.com/twyouens/corso/src` for this fork. Every import across `src/` was updated to match; no other behavior changed.
 - Bumped the module's `go` directive (and CI's Go toolchain) from 1.21 to 1.27 (pinned via a separate `toolchain go1.27.2` line), the current stable release available to this fork, and fixed the handful of new `go vet` findings (non-constant printf format strings) and a `staticcheck` finding (unused context) surfaced by the newer toolchain.

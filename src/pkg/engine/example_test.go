@@ -1,12 +1,12 @@
 // This file holds the compiled examples for the six capability areas
-// docs/library-api.md documents: opening a repository, backing up,
+// this package's README.md documents: opening a repository, backing up,
 // browsing a point's folder tree and items, finding items by name,
 // listing and deleting points by tag, and running maintenance.
 //
 // They are godoc examples with no "Output:" comment, so `go test` compiles
 // them and never runs them - which is the point. Nothing here needs a
 // repository, a Microsoft 365 tenant or a credential, and every snippet
-// docs/library-api.md shows is a copy of one of these functions, so the
+// this package's README.md shows is a copy of one of these functions, so the
 // compiler (and `go vet`'s own check that an ExampleType_Method name
 // matches a real exported method) is what keeps that documentation true
 // rather than someone's memory of it.
@@ -154,7 +154,7 @@ func ExampleInitializeRepository() {
 	// Opening a repository also connects and verifies the Microsoft 365
 	// account, and installs a process-global Graph concurrency clamp that
 	// the first open in this process latches for every later one - see
-	// docs/library-api.md.
+	// this package's README.md.
 	repo, err := engine.InitializeRepository(ctx, cfg)
 	if err != nil {
 		fmt.Println("initialising the repository:", err)

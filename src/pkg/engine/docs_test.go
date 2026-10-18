@@ -1,10 +1,10 @@
 package engine
 
 import (
+	_ "embed"
 	"go/ast"
 	"go/parser"
 	"go/token"
-	"os"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -15,9 +15,27 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// libraryAPIDoc is the k3ep-facing guide to this package: docs/library-api.md,
-// relative to this package's own directory.
-const libraryAPIDoc = "../../../docs/library-api.md"
+// libraryAPIDoc is the k3ep-facing guide to this package, README.md in this
+// directory, embedded rather than read from disk.
+//
+// Embedded deliberately, and the reason is the whole point of this guard.
+// The guide first lived at the repository root in docs/, outside this Go
+// module, where Go's test cache did not treat it as an input: editing only
+// the markdown and re-running `go test ./...` reported a cached pass. CI
+// was no better - .github/workflows/ci.yml restores GOCACHE keyed only on
+// hashFiles('src/go.sum'), and `make check` runs `go test ./...` with no
+// -count=1, so a pull request touching only the guide would have been
+// handed the same cached pass. Embedding makes the markdown part of this
+// test binary, so any edit to it changes the binary's build inputs and the
+// cached result cannot be reused, locally or in CI. Measured both ways
+// before and after the move.
+//
+//go:embed README.md
+var libraryAPIDoc string
+
+// libraryAPIDocPath is only used in failure messages, so a reader knows
+// which file to edit.
+const libraryAPIDocPath = "src/pkg/engine/README.md"
 
 // TestLibraryAPIDoc_MatchesExportedSurface is the documentation-integrity
 // check chunk 0.8 added, and it runs in both directions:
@@ -49,18 +67,14 @@ const libraryAPIDoc = "../../../docs/library-api.md"
 //   - It is textual, so it cannot tell a mention in a code block from a
 //     mention in prose, and cannot notice a symbol documented under the
 //     wrong heading.
-//   - One operational trap, measured rather than assumed: the guide lives
-//     outside this Go module (the module root is src/, the guide is in the
-//     repository's docs/), so Go's test cache does not treat it as an input.
-//     Editing only the markdown and re-running `go test ./...` reports a
-//     cached pass. After editing the guide, run
-//     `GOWORK=off GO111MODULE=on go test -count=1 ./pkg/engine/`. CI, with a
-//     cold cache, does run it.
+//   - It does not need -count=1, and that is a property of the embed, not
+//     of go test: see libraryAPIDoc above for the cached-pass hole this
+//     closes and how it was measured. Nothing else in this repository
+//     depends on a file outside the module; anything that does should
+//     assume the same hole until it proves otherwise.
 func TestLibraryAPIDoc_MatchesExportedSurface(t *testing.T) {
-	raw, err := os.ReadFile(filepath.Clean(libraryAPIDoc))
-	require.NoError(t, err, "reading %s", libraryAPIDoc)
-
-	doc := string(raw)
+	doc := libraryAPIDoc
+	require.NotEmpty(t, doc, "the embedded guide is empty")
 
 	topLevel, fields, methods := exportedSurface(t)
 
@@ -79,7 +93,7 @@ func TestLibraryAPIDoc_MatchesExportedSurface(t *testing.T) {
 			topLevel,
 			name,
 			"%s names engine.%s, which is not an exported declaration of this package",
-			libraryAPIDoc,
+			libraryAPIDocPath,
 			name)
 	}
 
@@ -107,7 +121,7 @@ func TestLibraryAPIDoc_MatchesExportedSurface(t *testing.T) {
 			t,
 			"documented member does not exist",
 			"%s names %s.%s, which is neither an exported field nor a method of %s",
-			libraryAPIDoc,
+			libraryAPIDocPath,
 			typeName,
 			memberName,
 			typeName)
@@ -129,7 +143,7 @@ func TestLibraryAPIDoc_MatchesExportedSurface(t *testing.T) {
 		t,
 		undocumented,
 		"these exported declarations are not named anywhere in %s: %s",
-		libraryAPIDoc,
+		libraryAPIDocPath,
 		strings.Join(undocumented, ", "))
 }
 

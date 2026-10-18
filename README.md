@@ -5,7 +5,7 @@
 > a progress callback, browse a backup point's folders and items, find items by
 > name, and list, delete or run maintenance on backup points.
 >
-> - **Start here:** [`docs/library-api.md`](docs/library-api.md) — the call
+> - **Start here:** [`src/pkg/engine/README.md`](src/pkg/engine/README.md) — the call
 >   shapes, the operational contract a caller has to know, the `go.work`
 >   instructions for local development across repositories, and the `go get`
 >   line that pins a release.
