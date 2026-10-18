@@ -141,21 +141,36 @@ func exportedSurface(t *testing.T) (
 	fields map[string]map[string]bool,
 	methods map[string]map[string]bool,
 ) {
+	// Enumerated with Glob and parsed file by file, following
+	// exported_api_test.go's pattern: go/parser.ParseDir is deprecated, and
+	// like that test this one is syntactic anyway, so a build-tag-excluded
+	// file is still parsed - which errs on the side of requiring more to be
+	// documented, not less.
+	files, err := filepath.Glob("*.go")
+	require.NoError(t, err)
+	require.NotEmpty(t, files, "expected at least one .go file in this directory")
+
 	fset := token.NewFileSet()
+	parsed := []*ast.File{}
 
-	pkgs, err := parser.ParseDir(fset, ".", func(fi os.FileInfo) bool {
-		return !strings.HasSuffix(fi.Name(), "_test.go")
-	}, parser.SkipObjectResolution)
-	require.NoError(t, err, "parsing this package's source")
+	for _, file := range files {
+		if strings.HasSuffix(file, "_test.go") {
+			continue
+		}
 
-	pkg, ok := pkgs["engine"]
-	require.True(t, ok, "package engine not found in this directory")
+		f, err := parser.ParseFile(fset, file, nil, parser.SkipObjectResolution)
+		require.NoError(t, err, "parsing %s", file)
+
+		parsed = append(parsed, f)
+	}
+
+	require.NotEmpty(t, parsed, "expected at least one non-test .go file")
 
 	topLevel = map[string]struct{}{}
 	fields = map[string]map[string]bool{}
 	methods = map[string]map[string]bool{}
 
-	for _, file := range pkg.Files {
+	for _, file := range parsed {
 		for _, decl := range file.Decls {
 			switch d := decl.(type) {
 			case *ast.FuncDecl:
