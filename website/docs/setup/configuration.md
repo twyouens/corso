@@ -23,8 +23,10 @@ Three distinct pieces of configuration are required by Corso:
 
 * S3 object storage configuration to store backups. See [AWS Credentials Setup](../repos#s3-creds-setup) for
 alternate ways to pass AWS credentials.
-  * `AWS_ACCESS_KEY_ID`: Access key for an IAM user or role for accessing an S3 bucket
-  * `AWS_SECRET_ACCESS_KEY`: Secret key associated with the access key
+  * `AWS_ACCESS_KEY_ID`: Access key for an IAM user or role for accessing an S3 bucket. Required for S3: Corso
+    does not use the AWS SDK's own credential chain, so an instance role or a shared credentials file is not
+    enough on its own. See [AWS Credentials Setup](../repos#s3-creds-setup).
+  * `AWS_SECRET_ACCESS_KEY`: Secret key associated with the access key. Required for S3.
   * (Optional) `AWS_SESSION_TOKEN`: Session token required when using temporary credentials
 
 * Microsoft 365 Configuration

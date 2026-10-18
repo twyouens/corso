@@ -39,6 +39,21 @@ func addS3Commands(cmd *cobra.Command) *cobra.Command {
 	return c
 }
 
+// s3CredentialRequirement is appended to both S3 subcommands' long help.
+// Chunk 0.9 removed the fork's ability to connect to S3 with no explicit
+// credentials, so the help has to say so: a capability that disappears
+// without a word in the help and the changelog reads as a bug to the
+// next person who relies on it.
+const s3CredentialRequirement = `
+
+Explicit S3 credentials are required. Supply an access key and a secret key with
+--aws-access-key/--aws-secret-access-key, in the Corso config file, or as the
+AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY environment variables. Corso does not
+use the AWS SDK's own credential chain, so an EC2 or ECS instance role, a shared
+credentials file or profile, SSO and web-identity credentials are deliberately not
+supported: a bucket, prefix and endpoint are only ever reached with credentials
+Corso was given explicitly.`
+
 const (
 	s3ProviderCommand          = "s3"
 	s3ProviderCommandUseSuffix = "--bucket <bucket>"
@@ -71,9 +86,10 @@ corso repo connect s3 --bucket my-bucket --endpoint my-s3-server-endpoint`
 // `corso repo init s3 [<flag>...]`
 func s3InitCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:     s3ProviderCommand,
-		Short:   "Initialize a S3 repository",
-		Long:    `Bootstraps a new S3 repository and connects it to your m365 account.`,
+		Use:   s3ProviderCommand,
+		Short: "Initialize a S3 repository",
+		Long: `Bootstraps a new S3 repository and connects it to your m365 account.` +
+			s3CredentialRequirement,
 		RunE:    initS3Cmd,
 		Args:    cobra.NoArgs,
 		Example: s3ProviderCommandInitExamples,
@@ -152,9 +168,10 @@ func initS3Cmd(cmd *cobra.Command, args []string) error {
 // `corso repo connect s3 [<flag>...]`
 func s3ConnectCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:     s3ProviderCommand,
-		Short:   "Connect to a S3 repository",
-		Long:    `Ensures a connection to an existing S3 repository.`,
+		Use:   s3ProviderCommand,
+		Short: "Connect to a S3 repository",
+		Long: `Ensures a connection to an existing S3 repository.` +
+			s3CredentialRequirement,
 		RunE:    connectS3Cmd,
 		Args:    cobra.NoArgs,
 		Example: s3ProviderCommandConnectExamples,

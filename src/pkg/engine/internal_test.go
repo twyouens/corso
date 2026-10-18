@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -254,6 +255,42 @@ func TestStartProgress_PollsAndFinalizes(t *testing.T) {
 	countAfterStop := len(snapshots)
 	time.Sleep(2 * progressInterval)
 	assert.Equal(t, countAfterStop, len(snapshots))
+}
+
+// TestErrEmptyTagFilter_MessageNamesNoSingleCaller pins the wording of
+// an error two different operations return. Chunk 0.7 made
+// FindItemsByName return ErrEmptyTagFilter as well as DeleteBackupPoints,
+// and corrected the doc comment but not the message string, so a caller
+// reading a log saw "DeleteBackupPoints requires at least one tag" after
+// calling FindItemsByName - which is actively misleading when the log
+// line is the only evidence of what happened. Chunk 0.9 reworded it; this
+// test fails if a future caller is named in it again without the others.
+//
+// The error's identity is unchanged: errors.Is still recognises it from
+// both callers, which TestDeleteBackupPoints_RejectsEmptyTags and
+// browse_test.go's TestFindItemsByName_RequiresTagsAndName assert against
+// the real methods. This test re-asserts it for both in one place, so
+// the pairing is visible.
+func TestErrEmptyTagFilter_MessageNamesNoSingleCaller(t *testing.T) {
+	ctx, flush := tester.NewContext(t)
+	defer flush()
+
+	msg := ErrEmptyTagFilter.Error()
+
+	namesDelete := strings.Contains(msg, "DeleteBackupPoints")
+	namesFind := strings.Contains(msg, "FindItemsByName")
+
+	assert.Equal(t, namesDelete, namesFind,
+		"this error is returned by DeleteBackupPoints and FindItemsByName alike: "+
+			"its message must name both callers or neither, never one")
+
+	r := &Repository{}
+
+	_, err := r.DeleteBackupPoints(ctx, nil)
+	assert.ErrorIs(t, err, ErrEmptyTagFilter, "DeleteBackupPoints must still return it")
+
+	_, err = r.FindItemsByName(ctx, FindItemsRequest{Name: "anything"})
+	assert.ErrorIs(t, err, ErrEmptyTagFilter, "FindItemsByName must still return it")
 }
 
 // TestDeleteBackupPoints_RejectsEmptyTags proves DeleteBackupPoints never

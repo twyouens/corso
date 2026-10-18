@@ -163,8 +163,7 @@ func (suite *S3CfgUnitSuite) TestStorage_S3Config_StringConfig() {
 				DoNotVerifyTLS: true,
 				// Non-blank, so this case still exercises what it is
 				// actually about (TLS flag serialization), now that
-				// validate() requires credentials by default - see
-				// AllowAmbientCredentials in s3.go.
+				// validate() requires credentials unconditionally.
 				AWS: credentials.AWS{AccessKey: "access", SecretKey: "secret"},
 			},
 			expect: map[string]string{

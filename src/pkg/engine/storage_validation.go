@@ -18,9 +18,11 @@ import (
 //
 // Kopia's own S3 blob storage, given no static credentials, falls back to
 // its AWS SDK's ambient credential chain: environment variables, then the
-// EC2/ECS/IMDS instance role. That is the right behavior for the fork's
-// CLI, which legitimately runs under a human's or a CI job's own AWS
-// identity. It is the wrong behavior for this package: a caller-chosen
+// EC2/ECS/IMDS instance role. That used to be treated as the right
+// behaviour for the fork's CLI, running under a human's or a CI job's
+// own AWS identity; chunk 0.9 dropped that, so it is now the wrong
+// behaviour everywhere in this fork. It was always wrong for this
+// package: a caller-chosen
 // bucket, prefix and endpoint silently reaching the *platform's own*
 // ambient AWS identity - because a caller forgot an access key, or some
 // other part of the config was tenant-influenced - is exactly the kind of
@@ -30,16 +32,16 @@ import (
 // credentials, a MinIO bucket was reachable using this machine's own
 // ambient AWS identity.
 //
-// As of this round, pkg/storage.S3Config.validate() (the shared
-// validator) enforces this same requirement by default too - the
-// security reviewer proved it was reachable even through
+// pkg/storage.S3Config.validate() (the shared validator) enforces this
+// same requirement, for every caller, with no opt-out - chunk 0.6's
+// security reviewer proved the condition was reachable even through
 // pkg/repository.New + Initialize directly, bypassing this package
 // entirely, since pkg/repository is itself public (REPO-2 permits k3ep to
-// import it; only prose steered callers to this facade instead). Its
-// AllowAmbientCredentials escape hatch, set unconditionally by the CLI's
-// own config path (pkg/storage's ApplyConfigOverrides) and nowhere else,
-// is what keeps the CLI working with environment or IAM-role credentials.
-// This package never sets it, on any Storage it builds or is handed.
+// import it; only prose steered callers to this facade instead). Chunk
+// 0.6 first added an opt-out so the fork's CLI could keep connecting
+// with no explicit keys; chunk 0.9 deleted that capability outright, on
+// the user's decision, so explicit S3 credentials are now required
+// everywhere in this fork.
 //
 // This function remains, as a second, earlier layer: it fails fast,
 // before any Microsoft 365 connection is attempted, with this package's
