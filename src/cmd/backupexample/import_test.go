@@ -13,8 +13,9 @@ import (
 
 // TestExample_ImportsNoInternalPackage is chunk 0.6's headline acceptance
 // criterion, proven mechanically rather than by inspection: this parses
-// every .go file in this directory (excluding this test file itself) and
-// fails if any import path contains "/internal/" or ends in "/internal".
+// every non-test .go file directly in this directory and fails if any of
+// their own import declarations names a path containing "/internal/" or
+// ending in "/internal".
 //
 // Go's own compiler does not stop this program from importing an internal
 // package - cmd/backupexample shares a module with src/internal/..., so
@@ -24,6 +25,28 @@ import (
 // program) ever stopped being enough and someone reached into
 // src/internal to make up the difference, this test - not a human
 // reviewer - catches it.
+//
+// What this does NOT catch, by construction, and any later chunk reusing
+// this pattern (now a repo-wide convention; see the fork's CLAUDE.md)
+// should keep in mind: it only parses this package's own direct import
+// declarations.
+//   - An internal type reached indirectly - through a value returned by
+//     some other same-module src/pkg function, using Go's type-inference
+//     "escape hatch" (see pkg/engine's own package doc comment) - without
+//     this file ever writing the import itself, is invisible to this
+//     check. pkg/engine is designed so that path never needs to exist;
+//     this test cannot prove that design property on its own, only that
+//     no one wrote the easy, visible version of the mistake.
+//   - A subdirectory package under cmd/backupexample (none exists today)
+//     is not scanned: filepath.Glob("*.go") is not recursive.
+//   - This file's own _test.go files are excluded, deliberately: a test
+//     helper is allowed to reach into internal for its own fixtures
+//     without that implying the example itself needs to. A test file
+//     importing internal to feed the program under test would not be
+//     caught.
+//   - A build-constrained file only compiled under a different
+//     GOOS/GOARCH/tag, or an import reached via go:linkname (which has no
+//     import declaration at all), would not be caught either.
 func TestExample_ImportsNoInternalPackage(t *testing.T) {
 	files, err := filepath.Glob("*.go")
 	require.NoError(t, err)

@@ -22,8 +22,16 @@
 //
 //	BACKUPEXAMPLE_REPO_PATH - a filesystem directory for the Kopia
 //	  repository. Defaults to a fresh temporary directory.
-//	BACKUPEXAMPLE_PASSPHRASE - the repository's encryption key. Defaults to
-//	  a fixed example passphrase; never do this outside an example.
+//
+// Required, with no default - review flagged a hardcoded fallback
+// passphrase in an earlier version of this file as exactly the kind of
+// thing that gets copied into real code, and example code is what gets
+// copied:
+//
+//	BACKUPEXAMPLE_PASSPHRASE - the repository's encryption key. No
+//	  default: this program fails closed rather than silently backing a
+//	  real mailbox up under a passphrase anyone reading this file also
+//	  knows.
 //
 // Run from src/ with:
 //
@@ -34,6 +42,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/twyouens/corso/src/pkg/account"
@@ -57,11 +66,14 @@ func run() error {
 	clientSecret := os.Getenv("AZURE_CLIENT_SECRET")
 	userID := os.Getenv("SEED_USER_ID")
 
+	passphrase := os.Getenv("BACKUPEXAMPLE_PASSPHRASE")
+
 	for name, v := range map[string]string{
-		"AZURE_TENANT_ID":     tenantID,
-		"AZURE_CLIENT_ID":     clientID,
-		"AZURE_CLIENT_SECRET": clientSecret,
-		"SEED_USER_ID":        userID,
+		"AZURE_TENANT_ID":          tenantID,
+		"AZURE_CLIENT_ID":          clientID,
+		"AZURE_CLIENT_SECRET":      clientSecret,
+		"SEED_USER_ID":             userID,
+		"BACKUPEXAMPLE_PASSPHRASE": passphrase,
 	} {
 		if len(v) == 0 {
 			return fmt.Errorf("missing required environment variable %s", name)
@@ -78,10 +90,12 @@ func run() error {
 		repoPath = tmp
 	}
 
-	passphrase := os.Getenv("BACKUPEXAMPLE_PASSPHRASE")
-	if len(passphrase) == 0 {
-		passphrase = "backupexample-only-never-use-this-outside-an-example" //nolint:gosec
-	}
+	// Kopia's own local config/cache directory. Left unset, it defaults to
+	// a predictable "/tmp/repository-<hash>.config" (internal/kopia/conn.go),
+	// a filename anyone on the same machine could guess or watch for; set
+	// it explicitly, alongside repoPath, so the only predictable thing
+	// about this example's on-disk footprint is its own temp directory.
+	kopiaCfgDir := filepath.Join(repoPath, "kopia-config")
 
 	ctx := context.Background()
 
@@ -98,7 +112,10 @@ func run() error {
 	st, err := storage.NewStorage(
 		storage.ProviderFilesystem,
 		&storage.FilesystemConfig{Path: repoPath},
-		storage.CommonConfig{Corso: credentials.Corso{CorsoPassphrase: passphrase}})
+		storage.CommonConfig{
+			Corso:       credentials.Corso{CorsoPassphrase: passphrase},
+			KopiaCfgDir: kopiaCfgDir,
+		})
 	if err != nil {
 		return fmt.Errorf("building the storage configuration: %w", err)
 	}
@@ -132,9 +149,9 @@ func run() error {
 	sel.DiscreteOwner = userID
 
 	tags := map[string]string{
-		"tenant": tenantID,
-		"policy": "backupexample-demo-policy",
-		"object": userID,
+		"k3ep-tenant": tenantID,
+		"k3ep-policy": "backupexample-demo-policy",
+		"k3ep-object": userID,
 	}
 
 	point, err := repo.Backup(ctx, engine.BackupRequest{
@@ -161,7 +178,7 @@ func run() error {
 		point.BytesUploaded,
 		point.Tags)
 
-	points, err := repo.ListBackupPoints(ctx, map[string]string{"object": userID})
+	points, err := repo.ListBackupPoints(ctx, map[string]string{"k3ep-object": userID})
 	if err != nil {
 		return fmt.Errorf("listing backup points: %w", err)
 	}

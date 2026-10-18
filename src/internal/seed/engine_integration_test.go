@@ -21,6 +21,7 @@ import (
 	"github.com/twyouens/corso/src/pkg/engine"
 	"github.com/twyouens/corso/src/pkg/selectors"
 	"github.com/twyouens/corso/src/pkg/services/m365/api"
+	"github.com/twyouens/corso/src/pkg/services/m365/api/graph"
 	"github.com/twyouens/corso/src/pkg/storage"
 )
 
@@ -146,6 +147,19 @@ func (suite *EngineIntegrationSuite) TestOpenRepository_Filesystem() {
 	ctx, flush := tester.NewContext(t)
 	defer flush()
 
+	// Required for this test to pass standalone (go test -run
+	// TestEngineIntegrationSuite/TestOpenRepository_Filesystem), not just
+	// as part of the whole ./internal/seed/... suite: see
+	// api_integration_test.go and smoke_test.go, which call this for the
+	// same reason. graph.InitializeConcurrencyLimiter is a sync.Once; if
+	// nothing calls it before the first real Graph request in this test
+	// binary, the middleware's own zero-value default
+	// (concurrencyLimitMiddlewareSingleton, non-nil but with a nil
+	// semaphore) gets wired into the pipeline and every Graph call fails
+	// with "nil concurrency limiter" - confirmed by running this test
+	// standalone before this call was added.
+	graph.InitializeConcurrencyLimiter(ctx, true, 4)
+
 	manifestPath := filepath.Join(t.TempDir(), "seed-manifest.json")
 	cfg := engineTestConfig(t, manifestPath)
 	acct := engineTestAccount(t, cfg)
@@ -212,6 +226,10 @@ func (suite *EngineIntegrationSuite) TestOpenRepository_MinIO() {
 	ctx, flush := tester.NewContext(t)
 	defer flush()
 
+	// See TestOpenRepository_Filesystem's identical call for why this is
+	// needed to run standalone.
+	graph.InitializeConcurrencyLimiter(ctx, true, 4)
+
 	manifestPath := filepath.Join(t.TempDir(), "seed-manifest.json")
 	cfg := engineTestConfig(t, manifestPath)
 	acct := engineTestAccount(t, cfg)
@@ -268,6 +286,10 @@ func (suite *EngineIntegrationSuite) TestBackup_TagsProgressDeleteMaintenance() 
 	ctx, flush := tester.NewContext(t)
 	defer flush()
 
+	// See TestOpenRepository_Filesystem's identical call for why this is
+	// needed to run standalone.
+	graph.InitializeConcurrencyLimiter(ctx, true, 4)
+
 	manifestPath := filepath.Join(t.TempDir(), "seed-manifest.json")
 	cfg := engineTestConfig(t, manifestPath)
 	acct := engineTestAccount(t, cfg)
@@ -316,35 +338,48 @@ func (suite *EngineIntegrationSuite) TestBackup_TagsProgressDeleteMaintenance() 
 	)
 
 	suite.Run("BackupWithTags", func() {
+		// suite.Run (testify) swaps in a subtest-scoped *testing.T before
+		// running this closure; capturing a fresh t here, instead of
+		// reusing the parent TestBackup_TagsProgressDeleteMaintenance's own
+		// t, is required for failures in this subtest to actually be
+		// attributed to it. Reusing the outer t (as an earlier version of
+		// this file did) meant every subtest's PASS/FAIL was attributed to
+		// the parent test instead, and the subtests themselves always
+		// printed PASS regardless of what their own assertions found -
+		// found in review.
+		t := suite.T()
+
 		pointA, err = repo.Backup(ctx, engine.BackupRequest{
 			Selector: mailboxSelector(cfg.UserID),
 			Tags: map[string]string{
-				"tenant": cfg.TenantID,
-				"policy": policyA,
-				"object": cfg.UserID,
+				"k3ep-tenant": cfg.TenantID,
+				"k3ep-policy": policyA,
+				"k3ep-object": cfg.UserID,
 			},
 		})
 		require.NoError(t, err, clues.ToCore(err))
 
 		assert.NotEmpty(t, pointA.ID)
-		assert.Equal(t, cfg.TenantID, pointA.Tags["tenant"])
-		assert.Equal(t, policyA, pointA.Tags["policy"])
-		assert.Equal(t, cfg.UserID, pointA.Tags["object"])
+		assert.Equal(t, cfg.TenantID, pointA.Tags["k3ep-tenant"])
+		assert.Equal(t, policyA, pointA.Tags["k3ep-policy"])
+		assert.Equal(t, cfg.UserID, pointA.Tags["k3ep-object"])
 		// the fork's own bookkeeping tag must still be present alongside
 		// the caller's tags, not replaced by them.
 		assert.NotEmpty(t, pointA.Tags["service"])
 	})
 
 	suite.Run("ProgressCallbackInvokedAndNoStdout", func() {
+		t := suite.T()
+
 		stdoutBytes = captureStdout(t, func() {
 			var mu sync.Mutex
 
 			pointB, err = repo.Backup(ctx, engine.BackupRequest{
 				Selector: mailboxSelector(cfg.UserID),
 				Tags: map[string]string{
-					"tenant": cfg.TenantID,
-					"policy": policyB,
-					"object": cfg.UserID,
+					"k3ep-tenant": cfg.TenantID,
+					"k3ep-policy": policyB,
+					"k3ep-object": cfg.UserID,
 				},
 				Progress: func(p engine.ProgressSnapshot) {
 					mu.Lock()
@@ -363,46 +398,61 @@ func (suite *EngineIntegrationSuite) TestBackup_TagsProgressDeleteMaintenance() 
 	})
 
 	suite.Run("ListBackupPointsByTag", func() {
-		onlyA, err := repo.ListBackupPoints(ctx, map[string]string{"policy": policyA})
+		t := suite.T()
+
+		onlyA, err := repo.ListBackupPoints(ctx, map[string]string{"k3ep-policy": policyA})
 		require.NoError(t, err, clues.ToCore(err))
 		require.Len(t, onlyA, 1)
 		assert.Equal(t, pointA.ID, onlyA[0].ID)
 
-		onlyB, err := repo.ListBackupPoints(ctx, map[string]string{"policy": policyB})
+		onlyB, err := repo.ListBackupPoints(ctx, map[string]string{"k3ep-policy": policyB})
 		require.NoError(t, err, clues.ToCore(err))
 		require.Len(t, onlyB, 1)
 		assert.Equal(t, pointB.ID, onlyB[0].ID)
 
-		both, err := repo.ListBackupPoints(ctx, map[string]string{"object": cfg.UserID})
+		both, err := repo.ListBackupPoints(ctx, map[string]string{"k3ep-object": cfg.UserID})
 		require.NoError(t, err, clues.ToCore(err))
 		assert.Len(t, both, 2)
+
+		// Done-when #2/#9's documented behavior: a nil/empty tag filter
+		// returns every backup point in the repository, not nothing - this
+		// package has no notion of "my tenant" to default to. Proven live,
+		// not just asserted in a doc comment.
+		everything, err := repo.ListBackupPoints(ctx, nil)
+		require.NoError(t, err, clues.ToCore(err))
+		assert.GreaterOrEqual(t, len(everything), 2, "nil tags must return at least both points created above")
 	})
 
 	suite.Run("DeleteBackupPointsByTag", func() {
-		n, err := repo.DeleteBackupPoints(ctx, map[string]string{"policy": policyA})
+		t := suite.T()
+
+		deletedIDs, err := repo.DeleteBackupPoints(ctx, map[string]string{"k3ep-policy": policyA})
 		require.NoError(t, err, clues.ToCore(err))
-		assert.Equal(t, 1, n)
+		assert.Equal(t, []string{pointA.ID}, deletedIDs,
+			"DeleteBackupPoints must return the deleted point's own ID, not just a count")
 
 		// Positive case: pointA is gone.
-		gone, err := repo.ListBackupPoints(ctx, map[string]string{"policy": policyA})
+		gone, err := repo.ListBackupPoints(ctx, map[string]string{"k3ep-policy": policyA})
 		require.NoError(t, err, clues.ToCore(err))
 		assert.Empty(t, gone)
 
 		// Negative case: pointB, which does not carry policyA, must be
 		// completely unaffected by a delete scoped to policyA.
-		stillThere, err := repo.ListBackupPoints(ctx, map[string]string{"policy": policyB})
+		stillThere, err := repo.ListBackupPoints(ctx, map[string]string{"k3ep-policy": policyB})
 		require.NoError(t, err, clues.ToCore(err))
 		require.Len(t, stillThere, 1)
 		assert.Equal(t, pointB.ID, stillThere[0].ID)
 	})
 
 	suite.Run("MaintenanceKeepsRepositoryReadable", func() {
+		t := suite.T()
+
 		err := repo.RunMaintenance(ctx, engine.MaintenanceOptions{Force: true})
 		require.NoError(t, err, clues.ToCore(err))
 
 		// The repository must still be fully readable afterwards: pointB,
 		// which was never deleted, must still be there.
-		stillThere, err := repo.ListBackupPoints(ctx, map[string]string{"policy": policyB})
+		stillThere, err := repo.ListBackupPoints(ctx, map[string]string{"k3ep-policy": policyB})
 		require.NoError(t, err, clues.ToCore(err))
 		require.Len(t, stillThere, 1)
 		assert.Equal(t, pointB.ID, stillThere[0].ID)
