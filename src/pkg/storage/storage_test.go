@@ -134,11 +134,15 @@ func getTestS3Config(bucket, endpoint, prefix string) *S3Config {
 		Bucket:   bucket,
 		Endpoint: endpoint,
 		Prefix:   prefix,
-		// Non-blank: validate() requires credentials by default as of
-		// this review round (see AllowAmbientCredentials in s3.go), and
-		// this helper's only caller is a hash-stability test that does
-		// not care about credential values - AccessKey/SecretKey are
-		// excluded from the hash itself (excludedS3ConfigFieldsForHashing).
+		// Non-blank: validate() requires an access key and a secret key
+		// unconditionally (see s3.go's validate), so this fixture needs
+		// them even though its callers are hash tests. Note that these
+		// values DO affect the hash, despite
+		// excludedS3ConfigFieldsForHashing naming "AccessKey" and
+		// "SecretKey": exclusion matches top-level field names, and the
+		// embedded credentials.AWS is a single field named "AWS", which
+		// is hashed whole. See
+		// TestGetStorageConfigHash_PinnedValues, which pins both facts.
 		AWS: credentials.AWS{AccessKey: "test-access-key", SecretKey: "test-secret-key"},
 	}
 }
@@ -275,4 +279,65 @@ func (suite *StorageUnitSuite) TestMustMatchConfig() {
 			test.errorCheck(t, err)
 		})
 	}
+}
+
+// TestGetStorageConfigHash_PinnedValues pins the config hashes for two
+// fixed configs by exact value. The repository's own config filename is
+// derived from these (pkg/repository's
+// GenerateHashForRepositoryConfigFileName), so a shift strands every
+// existing repository: a change here must be a deliberate, recorded
+// decision, not a side effect.
+//
+// Measured at this chunk's base commit (cf74058f) and at its head, for
+// the same fixtures, and identical at both. Chunk 0.9 removes a struct
+// field from S3Config, which cannot move the hash because the field was
+// named in excludedS3ConfigFieldsForHashing - but "cannot" is the kind
+// of claim this session has learned to measure rather than assert.
+//
+// The second half pins something a reader would otherwise get wrong:
+// the hash is credential-sensitive. createFilteredS3ConfigForHashing
+// filters by top-level field name, and credentials.AWS is embedded, so
+// it appears as one field named "AWS" and is hashed whole;
+// excludedS3ConfigFieldsForHashing's "AccessKey", "SecretKey" and
+// "SessionToken" entries never match anything. That is pre-existing
+// behaviour, untouched here, and it means rotating an access key moves a
+// repository's config filename. Pinning it means anyone who "fixes" the
+// exclusion list has to notice that consequence first.
+func (suite *StorageUnitSuite) TestGetStorageConfigHash_PinnedValues() {
+	t := suite.T()
+
+	s3, err := NewStorage(ProviderS3, getTestS3Config("test-bucket", "https://aws.s3", "test-prefix"))
+	require.NoError(t, err, clues.ToCore(err))
+
+	s3Hash, err := s3.GetStorageConfigHash()
+	require.NoError(t, err, clues.ToCore(err))
+	assert.Equal(t, "e1e21c55", s3Hash, "the s3 config hash must not move")
+
+	fs, err := NewStorage(ProviderFilesystem, getTestFileSystemConfig("test/to/dir"))
+	require.NoError(t, err, clues.ToCore(err))
+
+	fsHash, err := fs.GetStorageConfigHash()
+	require.NoError(t, err, clues.ToCore(err))
+	assert.Equal(t, "c1074a13", fsHash, "the filesystem config hash must not move")
+
+	// a credential-less config can no longer reach GetStorageConfigHash
+	// (ToS3Config validates first), so hash it directly: this is the
+	// config shape whose hash the field removal could most plausibly
+	// have moved.
+	bare := S3Config{Bucket: "test-bucket", Endpoint: "https://aws.s3", Prefix: "test-prefix/"}
+
+	bareHash, err := bare.configHash()
+	require.NoError(t, err, clues.ToCore(err))
+	assert.Equal(t, "0a1061de", bareHash, "the credential-less s3 config hash must not move")
+
+	// credential-sensitivity, pinned deliberately: see the doc comment.
+	rotated := *getTestS3Config("test-bucket", "https://aws.s3", "test-prefix")
+	rotated.AccessKey = "rotated-access-key"
+
+	rotatedHash, err := rotated.configHash()
+	require.NoError(t, err, clues.ToCore(err))
+	assert.NotEqual(t, bareHash, rotatedHash)
+	assert.NotEqual(t, "e1e21c55", rotatedHash,
+		"the hash is credential-sensitive today; excludedS3ConfigFieldsForHashing's "+
+			"AccessKey/SecretKey/SessionToken entries do not match the embedded AWS field")
 }
