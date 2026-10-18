@@ -147,20 +147,22 @@ func (r repository) BackupsByTag(ctx context.Context, fs ...store.FilterOption) 
 }
 
 // AllBackupsByTag returns every backup matching all provided tags,
-// including assist and preview bases that BackupsByTag hides from its own
-// result (see backupsByTag below) because the CLI has never displayed
-// them. Those bases still carry real content and, in pkg/engine's case,
-// real caller-supplied tags: a recoverable error during a backup is
-// enough to produce one (see createBackupModels/isAssistBackup in
-// internal/operations/backup.go), and pkg/engine's Backup itself returns
-// an error and no BackupPoint in that case - but doPersistence has
-// already written the snapshot, the details streamstore entry and this
-// model by then. Without this method, that content was listable nowhere
-// and DeleteBackupPoints could not find it either, so a tag-scoped
-// "delete everything I own" never actually could. pkg/engine's
-// ListBackupPoints and DeleteBackupPoints both use this, not
-// BackupsByTag; see their doc comments for the resulting, deliberate
-// semantics.
+// including assist bases that BackupsByTag hides from its own result
+// (see backupsByTag below) because the CLI has never displayed them.
+// (Preview bases are not, and never were, filtered by backupsByTag
+// either - only model.AssistBackup is; an earlier version of this
+// comment claimed otherwise.) Assist bases still carry real content and,
+// in pkg/engine's case, real caller-supplied tags: a recoverable error
+// during a backup is enough to produce one (see
+// createBackupModels/isAssistBackup in internal/operations/backup.go),
+// and pkg/engine's Backup itself returns an error and no BackupPoint in
+// that case - but doPersistence has already written the snapshot, the
+// details streamstore entry and this model by then. Without this method,
+// that content was listable nowhere and DeleteBackupPoints could not
+// find it either, so a tag-scoped "delete everything I own" never
+// actually could. pkg/engine's ListBackupPoints and DeleteBackupPoints
+// both use this, not BackupsByTag; see their doc comments for the
+// resulting, deliberate semantics.
 func (r repository) AllBackupsByTag(ctx context.Context, fs ...store.FilterOption) ([]*backup.Backup, error) {
 	sw := store.NewWrapper(r.modelStore)
 	return allBackupsByTag(ctx, sw, fs)

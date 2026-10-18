@@ -143,17 +143,21 @@ func (r *Repository) Backup(ctx context.Context, req BackupRequest) (BackupPoint
 //
 // This includes every backup point that exists, regardless of the fork's
 // own internal merge/assist/preview classification - deliberately, and
-// unlike the fork's CLI, which has never displayed an assist or preview
-// base. From this package's point of view a backup point is "real" the
-// moment Backup's caller sees its tags (BackupPoint.Tags carries
-// whatever the fork classified it as, in the "backup-type" key, same as
-// any other tag), whether or not the fork's own base-selection logic
-// later folds it into another backup: a recoverable error partway
-// through a real backup is enough to leave one tagged assist, still
-// genuinely yours, still genuinely occupying storage, and this method is
-// how a caller finds out it is there. A future browse/restore chunk
-// should keep this in mind: not every listed point is necessarily a
-// complete, independently restorable backup the way a merge base is.
+// unlike the fork's CLI, which has never displayed an assist base
+// specifically (the only type pkg/repository's own BackupsByTag ever
+// filtered; a preview base was never hidden by that method and so was
+// always CLI-visible too - an earlier version of this comment claimed
+// otherwise for preview, incorrectly). From this package's point of view
+// a backup point is "real" the moment Backup's caller sees its tags
+// (BackupPoint.Tags carries whatever the fork classified it as, in the
+// "backup-type" key, same as any other tag), whether or not the fork's
+// own base-selection logic later folds it into another backup: a
+// recoverable error partway through a real backup is enough to leave one
+// tagged assist, still genuinely yours, still genuinely occupying
+// storage, and this method is how a caller finds out it is there. A
+// future browse/restore chunk should keep this in mind: not every listed
+// point is necessarily a complete, independently restorable backup the
+// way a merge base is.
 func (r *Repository) ListBackupPoints(ctx context.Context, tags map[string]string) ([]BackupPoint, error) {
 	bs, err := r.backupsByTag(ctx, tags)
 	if err != nil {
@@ -172,8 +176,8 @@ func (r *Repository) ListBackupPoints(ctx context.Context, tags map[string]strin
 // DeleteBackupPoints deletes every backup point carrying all the key/value
 // pairs in tags, and only those - never a point whose tags don't match
 // every one supplied, and never silently skipping one that does: see
-// ListBackupPoints' doc comment for why this also reaches assist/preview
-// bases a caller might otherwise never learn exist, let alone delete. It
+// ListBackupPoints' doc comment for why this also reaches an assist base
+// a caller might otherwise never learn exists, let alone delete. It
 // returns the IDs of every backup point actually deleted, so a caller can
 // record exactly what happened (k3ep's AUD-1 audit event) without a
 // separate, racy list-then-delete round trip.
