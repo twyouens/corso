@@ -18,10 +18,9 @@ import (
 // this check.
 //
 // The bad-credential cases are built as raw Storage{Config: map[string]string{...}}
-// literals, not through storage.NewStorage - as of this review round,
-// pkg/storage.S3Config's own shared validator rejects the same blank
-// credentials by default too (see s3.go's AllowAmbientCredentials, which
-// this package never sets), so storage.NewStorage itself now refuses to
+// literals, not through storage.NewStorage - pkg/storage.S3Config's own
+// shared validator rejects the same blank credentials unconditionally
+// (see its validate()), so storage.NewStorage itself refuses to
 // construct a Storage with blank S3 credentials at all. A raw literal is
 // how a config could still reach this function with blank credentials -
 // built by hand instead of through the public constructor - and this

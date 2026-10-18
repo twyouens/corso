@@ -164,10 +164,28 @@ func (suite *ConfigSuite) TestWriteReadConfig() {
 	err := initWithViper(ctx, vpr, testConfigFilePath)
 	require.NoError(t, err, "initializing repo config", clues.ToCore(err))
 
+	// Explicit S3 credentials, in the environment, because
+	// ApplyConfigOverrides ends in validate() and S3 now requires an
+	// access key and a secret key unconditionally (chunk 0.9; before it,
+	// the CLI's config path set an opt-out flag instead, and this test
+	// relied on it). The config file deliberately never carries
+	// credentials - writeRepoConfigWithViper writes only bucket, prefix,
+	// endpoint and the TLS flags - so the environment is where the CLI
+	// reads them from, and setting them here also makes the read-back
+	// deterministic instead of dependent on the developer's own
+	// environment.
+	t.Setenv(credentials.AWSAccessKeyID, "write-read-config-access-key")
+	t.Setenv(credentials.AWSSecretAccessKey, "write-read-config-secret-key")
+	t.Setenv(credentials.AWSSessionToken, "")
+
 	s3Cfg := &storage.S3Config{
 		Bucket:         bkt,
 		DoNotUseTLS:    true,
 		DoNotVerifyTLS: true,
+		AWS: credentials.AWS{
+			AccessKey: "write-read-config-access-key",
+			SecretKey: "write-read-config-secret-key",
+		},
 	}
 	m365 := account.M365Config{AzureTenantID: tid}
 
@@ -191,6 +209,15 @@ func (suite *ConfigSuite) TestWriteReadConfig() {
 	assert.Equal(t, readS3Cfg.Bucket, s3Cfg.Bucket)
 	assert.Equal(t, readS3Cfg.DoNotUseTLS, s3Cfg.DoNotUseTLS)
 	assert.Equal(t, readS3Cfg.DoNotVerifyTLS, s3Cfg.DoNotVerifyTLS)
+	assert.Equal(t, s3Cfg.AccessKey, readS3Cfg.AccessKey,
+		"credentials come from the environment, never from the config file")
+	assert.Equal(t, s3Cfg.SecretKey, readS3Cfg.SecretKey)
+
+	// and the written config file itself carries no credential
+	written, err := os.ReadFile(testConfigFilePath)
+	require.NoError(t, err)
+	assert.NotContains(t, string(written), s3Cfg.AccessKey)
+	assert.NotContains(t, string(written), s3Cfg.SecretKey)
 
 	readM365, err := m365ConfigsFromViper(vpr)
 	require.NoError(t, err, clues.ToCore(err))

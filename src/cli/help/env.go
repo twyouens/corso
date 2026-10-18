@@ -73,8 +73,9 @@ var (
 		{azure, "AZURE_CLIENT_SECRET", "Azure secret for your Azure AD application used to access your M365 tenant."},
 	}
 	awsEVs = []envVar{
-		{aws, "AWS_ACCESS_KEY_ID", "Access key for an IAM user or role for accessing an S3 bucket."},
-		{aws, "AWS_SECRET_ACCESS_KEY", "Secret key associated with the access key."},
+		{aws, "AWS_ACCESS_KEY_ID", "Access key for an IAM user or role for accessing an S3 bucket. " +
+			"Required for S3: Corso does not use the AWS SDK's own credential chain."},
+		{aws, "AWS_SECRET_ACCESS_KEY", "Secret key associated with the access key. Required for S3."},
 		{aws, "AWS_SESSION_TOKEN", "Session token required when using temporary credentials."},
 	}
 )

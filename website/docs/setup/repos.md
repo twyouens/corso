@@ -61,17 +61,33 @@ Before setting up your Corso S3 repository, the following prerequisites must be 
 
 ### Credential setup {#s3-creds-setup}
 
-Corso supports the credential options offered by the AWS Go SDK. For Full details, see the *Specifying Credentials*
-section of the [official documentation](https://docs.aws.amazon.com/sdk-for-go/v1/developer-guide/configuring-sdk.html).
-The two most commonly-used options are:
+**Explicit credentials are required for S3.** Corso reads an access key and a secret key that you give it, and
+nothing else: it does not use the AWS SDK's own credential chain. Supply them in any one of these ways:
+
+* **Command flags** - `--aws-access-key` and `--aws-secret-access-key` on `corso repo init s3` and
+  `corso repo connect s3`.
 
 * **Environment variables** - set and export `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY`. If using temporary
   credentials derived by assuming an IAM Role, you will also need `AWS_SESSION_TOKEN`.
 
-* **Credentials file** - ensure that the credentials file is available to Corso (for example, may need to map it if
-  using Corso as a container). You may also want to set and export `AWS_PROFILE`, if not using the default profile, and
-  `AWS_SHARED_CREDENTIALS_FILE`, if not using the default file location. You can learn more about the AWS CLI
-  environment variables [here](https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-envvars.html).
+* **The Corso configuration file** - see [configuration](./configuration).
+
+If both the access key and the secret key are missing, or either is blank, Corso fails with a clear error and makes
+no request to the bucket at all.
+
+:::caution
+
+Credential sources that the AWS SDK would otherwise resolve on your behalf are **deliberately not supported**: an
+EC2 or ECS instance role (IMDS), a shared credentials file or `AWS_PROFILE`, SSO, and web-identity credentials.
+
+This is a deliberate removal, not an oversight. Previously, a configuration with no credentials was handed to the
+underlying storage client, which fell back through that chain - so a bucket, prefix and endpoint named by one
+caller could be reached using whatever identity the Corso *process* happened to hold, rather than one the caller
+supplied. Corso now only ever reaches storage with credentials it was given explicitly. If you ran Corso on an
+instance role with no keys, set `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` (for an instance role, from
+`aws sts assume-role` or the instance's own temporary credentials, with `AWS_SESSION_TOKEN`) before upgrading.
+
+:::
 
 ### Initialize a S3 repository
 

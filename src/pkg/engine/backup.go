@@ -26,7 +26,7 @@ import (
 // where RES-2 asks only for a search within one object's backup points.
 // ListBackupPoints is the deliberate exception: a nil filter there means
 // "every point", which is how a caller discovers what exists at all.
-var ErrEmptyTagFilter = errors.New("engine: DeleteBackupPoints requires at least one tag")
+var ErrEmptyTagFilter = errors.New("engine: this operation requires at least one tag")
 
 // progressInterval is how often a running backup's ProgressFunc is called
 // while the backup is in progress, in addition to the one guaranteed final

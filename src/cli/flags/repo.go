@@ -59,9 +59,12 @@ func AddAllStorageFlags(cmd *cobra.Command) {
 
 func AddAWSCredsFlags(cmd *cobra.Command) {
 	fs := cmd.Flags()
-	fs.StringVar(&AWSAccessKeyFV, AWSAccessKeyFN, "", "S3 access key")
-	fs.StringVar(&AWSSecretAccessKeyFV, AWSSecretAccessKeyFN, "", "S3 access secret")
-	fs.StringVar(&AWSSessionTokenFV, AWSSessionTokenFN, "", "S3 session token")
+	fs.StringVar(&AWSAccessKeyFV, AWSAccessKeyFN, "",
+		"S3 access key (required; may also be given as AWS_ACCESS_KEY_ID)")
+	fs.StringVar(&AWSSecretAccessKeyFV, AWSSecretAccessKeyFN, "",
+		"S3 access secret (required; may also be given as AWS_SECRET_ACCESS_KEY)")
+	fs.StringVar(&AWSSessionTokenFV, AWSSessionTokenFN, "",
+		"S3 session token, for temporary credentials (optional)")
 }
 
 // M365 flags
