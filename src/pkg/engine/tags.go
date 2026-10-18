@@ -63,10 +63,23 @@ var reservedTagKeys = []string{
 // problem. k3ep's own real tags (tenant, policy, object IDs) are nowhere
 // close to these limits; they exist to bound the worst case, not to
 // accommodate a legitimate large use this package knows about.
+//
+// maxTagTotalBytes bounds the sum of every key's and value's byte length
+// across the whole map, separately from the per-key/per-value bounds
+// above: the per-tag bounds alone still let maxTagCount tags each sized
+// right up to maxTagKeyBytes+maxTagValueBytes through, roughly 41 KB of
+// labels on a single backup point. At 10k backup points - not an unusual
+// count for a long-lived k3ep tenant - that is on the order of 400 MB of
+// manifest labels, held in memory on every Find, paid by every list and
+// every repository open, not just the caller who set the tags. The total
+// is set well under maxTagCount*(maxTagKeyBytes+maxTagValueBytes) so it
+// bites even when every individual tag is comfortably within its own
+// per-tag bound.
 const (
 	maxTagCount      = 32
 	maxTagKeyBytes   = 256
 	maxTagValueBytes = 1024
+	maxTagTotalBytes = 4096
 )
 
 // ErrReservedTagKey is returned by Backup when a BackupRequest.Tags key
@@ -91,6 +104,13 @@ var ErrTooManyTags = errors.New("engine: too many tags")
 // value exceeds maxTagKeyBytes/maxTagValueBytes.
 var ErrTagTooLarge = errors.New("engine: tag key or value is too large")
 
+// ErrTagsTooLarge is returned by Backup when a BackupRequest.Tags map's
+// combined key and value bytes exceed maxTagTotalBytes, even though every
+// individual key and value is within its own per-tag bound. See
+// maxTagTotalBytes' doc comment above for why this bound exists
+// separately from the per-key/per-value ones.
+var ErrTagsTooLarge = errors.New("engine: tags are too large in total")
+
 // validateTags rejects a caller's tag map outright - before any backup
 // work starts - if it is too large, or any individual key/value is too
 // large, or any key is reserved (see the package-level vars and consts
@@ -111,6 +131,8 @@ func validateTags(tags map[string]string) error {
 		}
 	}
 
+	totalBytes := 0
+
 	for k, v := range tags {
 		if strings.HasPrefix(k, reservedServiceCategoryPrefix) {
 			return fmt.Errorf("%w: %q", ErrReservedTagPrefix, reservedServiceCategoryPrefix)
@@ -123,6 +145,12 @@ func validateTags(tags map[string]string) error {
 		if len(v) > maxTagValueBytes {
 			return fmt.Errorf("%w: value for key %q is %d bytes, max %d", ErrTagTooLarge, k, len(v), maxTagValueBytes)
 		}
+
+		totalBytes += len(k) + len(v)
+	}
+
+	if totalBytes > maxTagTotalBytes {
+		return fmt.Errorf("%w: got %d bytes, max %d", ErrTagsTooLarge, totalBytes, maxTagTotalBytes)
 	}
 
 	return nil

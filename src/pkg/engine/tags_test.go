@@ -160,6 +160,64 @@ func TestValidateTags_BoundsTagCountAndSize(t *testing.T) {
 		assert.ErrorIs(t, err, ErrTagTooLarge)
 	})
 
+	t.Run("at the total bytes limit is fine", func(t *testing.T) {
+		// Five tags, each comfortably within the per-key (256) and
+		// per-value (1024) bounds, and five tags is nowhere near the
+		// count bound (32) - but their combined bytes sit at or just
+		// under maxTagTotalBytes, proving the total bound is checked,
+		// not just implied by the per-tag ones.
+		const n = 5
+
+		tags := make(map[string]string, n)
+
+		for i := 0; i < n; i++ {
+			key := fmt.Sprintf("k3ep-k-%d", i) // fixed width: single-digit i
+			valueLen := (maxTagTotalBytes / n) - len(key)
+			tags[key] = strings.Repeat("v", valueLen)
+		}
+
+		total := 0
+		for k, v := range tags {
+			total += len(k) + len(v)
+		}
+
+		require.LessOrEqual(t, total, maxTagTotalBytes)
+		assert.NoError(t, validateTags(tags))
+	})
+
+	t.Run("over the total bytes limit is rejected even though every tag is within bounds", func(t *testing.T) {
+		// Same shape as above, but padded enough to push the combined
+		// total past maxTagTotalBytes while every single key and value
+		// stays far under maxTagKeyBytes/maxTagValueBytes, and the tag
+		// count stays far under maxTagCount. Only the new total-bytes
+		// bound can reject this.
+		const n = 5
+
+		key := "k3ep-key"
+		valueLen := (maxTagTotalBytes / n) + 50
+		require.Less(t, len(key), maxTagKeyBytes)
+		require.Less(t, valueLen, maxTagValueBytes)
+
+		value := strings.Repeat("v", valueLen)
+
+		tags := make(map[string]string, n)
+		for i := 0; i < n; i++ {
+			tags[fmt.Sprintf("%s-%d", key, i)] = value
+		}
+		require.Less(t, len(tags), maxTagCount)
+
+		total := 0
+		for k, v := range tags {
+			total += len(k) + len(v)
+		}
+
+		require.Greater(t, total, maxTagTotalBytes)
+
+		err := validateTags(tags)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, ErrTagsTooLarge)
+	})
+
 	t.Run("the adversarial extreme (1000 tags of 64KB) is rejected", func(t *testing.T) {
 		tags := make(map[string]string, 1000)
 		big := strings.Repeat("x", 64*1024)

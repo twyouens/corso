@@ -69,7 +69,10 @@ type BackupRequest struct {
 	// before any backup work starts, and before anything is uploaded: a
 	// key that collides with a reserved key or prefix (ErrReservedTagKey,
 	// ErrReservedTagPrefix), more than maxTagCount tags (ErrTooManyTags),
-	// or a key or value over the byte limits in tags.go (ErrTagTooLarge).
+	// a key or value over the per-tag byte limits in tags.go
+	// (ErrTagTooLarge), or a map whose combined key and value bytes
+	// exceed maxTagTotalBytes even though every individual tag is within
+	// its own limit (ErrTagsTooLarge).
 	Tags map[string]string
 
 	// Progress, if non-nil, is called periodically during the backup and
