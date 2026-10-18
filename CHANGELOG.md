@@ -56,6 +56,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `graph.ConcurrencyLimit(capacity int)`, a `graph.Option` setting one client's
   in-flight request capacity. `api.NewClient` prepends it from its caller's
   options, so an explicit option still overrides the derived default.
+- A live test, `internal/seed`'s `TestPerClientConcurrencyIntegrationSuite`,
+  opening two repositories in one process with `Parallelism.ItemFetch` 1 and 4 -
+  narrow first, the order that used to latch - and running a real Microsoft 365
+  backup through each. The capacity-1 path was reachable under the old
+  process-global limiter but never deliberately exercised against real Graph.
 
 ## [v0.1.0] (beta) - 2026-10-18
 
