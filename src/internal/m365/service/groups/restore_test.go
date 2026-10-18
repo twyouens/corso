@@ -18,7 +18,6 @@ import (
 	"github.com/twyouens/corso/src/pkg/fault"
 	"github.com/twyouens/corso/src/pkg/path"
 	"github.com/twyouens/corso/src/pkg/services/m365/api"
-	"github.com/twyouens/corso/src/pkg/services/m365/api/graph"
 )
 
 type GroupsUnitSuite struct {
@@ -77,10 +76,6 @@ func (suite *groupsIntegrationSuite) SetupSuite() {
 	t := suite.T()
 	suite.m365 = its.GetM365(t)
 
-	ctx, flush := tester.NewContext(t)
-	defer flush()
-
-	graph.InitializeConcurrencyLimiter(ctx, true, 4)
 }
 
 // test for getSiteName

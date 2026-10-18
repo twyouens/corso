@@ -153,9 +153,6 @@ func TestGraphIntgSuite(t *testing.T) {
 func (suite *GraphIntgSuite) SetupSuite() {
 	t := suite.T()
 
-	ctx, flush := tester.NewContext(t)
-	defer flush()
-
 	fakeAcct := tconfig.NewFakeM365Account(t)
 	acct := tconfig.NewM365Account(t)
 
@@ -168,8 +165,6 @@ func (suite *GraphIntgSuite) SetupSuite() {
 	require.NoError(t, err, clues.ToCore(err))
 
 	suite.credentials = m365
-
-	InitializeConcurrencyLimiter(ctx, false, 0)
 }
 
 func (suite *GraphIntgSuite) TestCreateAdapter() {

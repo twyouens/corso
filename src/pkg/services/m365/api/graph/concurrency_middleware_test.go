@@ -2,6 +2,7 @@ package graph
 
 import (
 	"context"
+	"math"
 	"math/rand"
 	"net/http"
 	"net/http/httptest"
@@ -74,32 +75,55 @@ func (suite *ConcurrencyMWUnitTestSuite) TestConcurrencyLimiter() {
 	wg.Wait()
 }
 
-func (suite *ConcurrencyMWUnitTestSuite) TestInitializeConcurrencyLimiter() {
-	t := suite.T()
-
-	ctx, flush := tester.NewContext(t)
-	defer flush()
-
-	InitializeConcurrencyLimiter(ctx, true, 2)
-	InitializeConcurrencyLimiter(ctx, false, 4)
-
-	assert.Equal(t, cap(concurrencyLimitMiddlewareSingleton.semaphore), 2, "singleton semaphore capacity changed")
-}
-
-func (suite *ConcurrencyMWUnitTestSuite) TestGenerateConcurrencyLimiter() {
+// TestConcurrencyLimiterClamp pins the capacity clamp at every boundary that
+// matters, through all three doors a capacity can enter by: the clamp
+// function, the ConcurrencyLimit option that api.NewClient uses, and
+// generateConcurrencyLimiter's resulting semaphore.
+//
+// The clamp is deliberately unchanged from the process-global version it
+// replaced: below 1 or above maxConcurrentRequests becomes
+// maxConcurrentRequests. Below 1 matters because a capacity of 0 would build
+// a semaphore every request blocks on forever, which is what a zero-value
+// control.Options would otherwise hand a caller who never set Parallelism.
+func (suite *ConcurrencyMWUnitTestSuite) TestConcurrencyLimiterClamp() {
 	tests := []struct {
 		name        string
 		cap         int
 		expectedCap int
 	}{
 		{
-			name:        "valid capacity",
+			name:        "zero capacity",
+			cap:         0,
+			expectedCap: maxConcurrentRequests,
+		},
+		{
+			name:        "one",
+			cap:         1,
+			expectedCap: 1,
+		},
+		{
+			name:        "two",
 			cap:         2,
 			expectedCap: 2,
 		},
 		{
-			name:        "zero capacity",
-			cap:         0,
+			name:        "at the maximum",
+			cap:         maxConcurrentRequests,
+			expectedCap: maxConcurrentRequests,
+		},
+		{
+			name:        "one above the maximum",
+			cap:         maxConcurrentRequests + 1,
+			expectedCap: maxConcurrentRequests,
+		},
+		{
+			name:        "a large value",
+			cap:         9001,
+			expectedCap: maxConcurrentRequests,
+		},
+		{
+			name:        "math.MaxInt",
+			cap:         math.MaxInt,
 			expectedCap: maxConcurrentRequests,
 		},
 		{
@@ -108,8 +132,8 @@ func (suite *ConcurrencyMWUnitTestSuite) TestGenerateConcurrencyLimiter() {
 			expectedCap: maxConcurrentRequests,
 		},
 		{
-			name:        "out of bounds capacity",
-			cap:         10,
+			name:        "math.MinInt",
+			cap:         math.MinInt,
 			expectedCap: maxConcurrentRequests,
 		},
 	}
@@ -118,9 +142,15 @@ func (suite *ConcurrencyMWUnitTestSuite) TestGenerateConcurrencyLimiter() {
 		suite.Run(test.name, func() {
 			t := suite.T()
 
+			assert.Equal(t, test.expectedCap, clampConcurrencyLimit(test.cap),
+				"clampConcurrencyLimit")
+
+			assert.Equal(t, test.expectedCap, populateConfig(ConcurrencyLimit(test.cap)).concurrencyLimit,
+				"the ConcurrencyLimit option's effect on a clientConfig")
+
 			actual := generateConcurrencyLimiter(test.cap)
-			assert.Equal(t, cap(actual.semaphore), test.expectedCap,
-				"retrieved semaphore capacity vs expected capacity")
+			assert.Equal(t, test.expectedCap, cap(actual.semaphore),
+				"the resulting semaphore's capacity")
 		})
 	}
 }

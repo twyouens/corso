@@ -116,11 +116,6 @@ type SharePointPageSuite struct {
 func (suite *SharePointPageSuite) SetupSuite() {
 	t := suite.T()
 
-	ctx, flush := tester.NewContext(t)
-	defer flush()
-
-	graph.InitializeConcurrencyLimiter(ctx, true, 4)
-
 	suite.siteID = tconfig.M365SiteID(t)
 	a := tconfig.NewM365Account(t)
 	m365, err := a.M365Config()

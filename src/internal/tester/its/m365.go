@@ -117,10 +117,8 @@ func GetM365(t *testing.T) M365IntgTestSetup {
 
 	setup := M365IntgTestSetup{}
 
-	ctx, flush := tester.NewContext(t)
+	_, flush := tester.NewContext(t)
 	defer flush()
-
-	graph.InitializeConcurrencyLimiter(ctx, true, 4)
 
 	setup.Acct = tconfig.NewM365Account(t)
 	setup.Creds, err = setup.Acct.M365Config()

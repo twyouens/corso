@@ -219,6 +219,17 @@ func defaultTransport() http.RoundTripper {
 	return defaultTransport
 }
 
+// internalMiddleware is the chain used by NewHTTPWrapper's clients - the
+// Requester that fetches arbitrary urls and large item content.
+//
+// Unlike kiotaMiddlewares, it carries no concurrency limiter, and never has:
+// upstream did not add one here, and neither did the per-client limiter work.
+// That is a deliberate omission, not an oversight.  These clients download
+// item content, and a semaphore here would cap every content download in an
+// api.Client at the same handful of in-flight requests as its metadata calls,
+// which is a throughput decision nobody has measured.  Requests on this chain
+// are still bounded by the per-minute rate limiter below and by the
+// collection layer's own control.Options.Parallelism.ItemFetch worker pools.
 func internalMiddleware(
 	cc *clientConfig,
 	counter *count.Bus,

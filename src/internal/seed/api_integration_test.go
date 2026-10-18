@@ -19,7 +19,6 @@ import (
 	"github.com/twyouens/corso/src/pkg/credentials"
 	"github.com/twyouens/corso/src/pkg/fault"
 	"github.com/twyouens/corso/src/pkg/services/m365/api"
-	"github.com/twyouens/corso/src/pkg/services/m365/api/graph"
 )
 
 // This is chunk 0.5's live proof that the Graph SDK, Kiota and azidentity
@@ -67,8 +66,6 @@ func (suite *GraphClientIntegrationSuite) TestAPIClientsReadSeededData() {
 
 	ctx, flush := tester.NewContext(t)
 	defer flush()
-
-	graph.InitializeConcurrencyLimiter(ctx, true, 4)
 
 	cfg := Config{
 		TenantID:     os.Getenv(EnvTenantID),

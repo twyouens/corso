@@ -63,11 +63,6 @@ func (exchangeBackup) ProduceBackupCollections(
 		bpc.Options.ToggleFeatures.DisableDelta = true
 	}
 
-	graph.InitializeConcurrencyLimiter(
-		ctx,
-		true,
-		bpc.Options.Parallelism.ItemFetch)
-
 	cdps, canUsePreviousBackup, err := exchange.ParseMetadataCollections(ctx, bpc.MetadataCollections)
 	if err != nil {
 		return nil, nil, false, err

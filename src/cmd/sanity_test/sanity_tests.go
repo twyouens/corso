@@ -13,7 +13,6 @@ import (
 	"github.com/twyouens/corso/src/cmd/sanity_test/export"
 	"github.com/twyouens/corso/src/cmd/sanity_test/restore"
 	"github.com/twyouens/corso/src/pkg/logger"
-	"github.com/twyouens/corso/src/pkg/services/m365/api/graph"
 )
 
 // ---------------------------------------------------------------------------
@@ -43,13 +42,10 @@ func main() {
 		PIIHandling: logger.PIIPlainText,
 	}
 
-	ctx, log := logger.Seed(context.Background(), ls)
+	_, log := logger.Seed(context.Background(), ls)
 	defer func() {
 		_ = log.Sync() // flush all logs in the buffer
 	}()
-
-	// TODO: only needed for exchange
-	graph.InitializeConcurrencyLimiter(ctx, true, 4)
 
 	root := rootCMD()
 

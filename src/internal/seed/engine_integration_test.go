@@ -21,7 +21,6 @@ import (
 	"github.com/twyouens/corso/src/pkg/engine"
 	"github.com/twyouens/corso/src/pkg/selectors"
 	"github.com/twyouens/corso/src/pkg/services/m365/api"
-	"github.com/twyouens/corso/src/pkg/services/m365/api/graph"
 	"github.com/twyouens/corso/src/pkg/storage"
 )
 
@@ -147,19 +146,6 @@ func (suite *EngineIntegrationSuite) TestOpenRepository_Filesystem() {
 	ctx, flush := tester.NewContext(t)
 	defer flush()
 
-	// Required for this test to pass standalone (go test -run
-	// TestEngineIntegrationSuite/TestOpenRepository_Filesystem), not just
-	// as part of the whole ./internal/seed/... suite: see
-	// api_integration_test.go and smoke_test.go, which call this for the
-	// same reason. graph.InitializeConcurrencyLimiter is a sync.Once; if
-	// nothing calls it before the first real Graph request in this test
-	// binary, the middleware's own zero-value default
-	// (concurrencyLimitMiddlewareSingleton, non-nil but with a nil
-	// semaphore) gets wired into the pipeline and every Graph call fails
-	// with "nil concurrency limiter" - confirmed by running this test
-	// standalone before this call was added.
-	graph.InitializeConcurrencyLimiter(ctx, true, 4)
-
 	manifestPath := filepath.Join(t.TempDir(), "seed-manifest.json")
 	cfg := engineTestConfig(t, manifestPath)
 	acct := engineTestAccount(t, cfg)
@@ -226,10 +212,6 @@ func (suite *EngineIntegrationSuite) TestOpenRepository_MinIO() {
 	ctx, flush := tester.NewContext(t)
 	defer flush()
 
-	// See TestOpenRepository_Filesystem's identical call for why this is
-	// needed to run standalone.
-	graph.InitializeConcurrencyLimiter(ctx, true, 4)
-
 	manifestPath := filepath.Join(t.TempDir(), "seed-manifest.json")
 	cfg := engineTestConfig(t, manifestPath)
 	acct := engineTestAccount(t, cfg)
@@ -285,10 +267,6 @@ func (suite *EngineIntegrationSuite) TestBackup_TagsProgressDeleteMaintenance() 
 
 	ctx, flush := tester.NewContext(t)
 	defer flush()
-
-	// See TestOpenRepository_Filesystem's identical call for why this is
-	// needed to run standalone.
-	graph.InitializeConcurrencyLimiter(ctx, true, 4)
 
 	manifestPath := filepath.Join(t.TempDir(), "seed-manifest.json")
 	cfg := engineTestConfig(t, manifestPath)

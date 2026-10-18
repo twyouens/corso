@@ -50,10 +50,6 @@ func (suite *URLCacheIntegrationSuite) SetupSuite() {
 	t := suite.T()
 	suite.m365 = its.GetM365(t)
 
-	ctx, flush := tester.NewContext(t)
-	defer flush()
-
-	graph.InitializeConcurrencyLimiter(ctx, true, 4)
 }
 
 // Basic test for urlCache. Create some files in onedrive, then access them via

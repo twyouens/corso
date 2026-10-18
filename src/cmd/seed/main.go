@@ -29,7 +29,6 @@ import (
 	"github.com/twyouens/corso/src/pkg/credentials"
 	"github.com/twyouens/corso/src/pkg/logger"
 	"github.com/twyouens/corso/src/pkg/services/m365/api"
-	"github.com/twyouens/corso/src/pkg/services/m365/api/graph"
 )
 
 func main() {
@@ -58,8 +57,6 @@ func main() {
 
 		logger.Flush(ctx)
 	}()
-
-	graph.InitializeConcurrencyLimiter(ctx, true, 4)
 
 	creds := account.M365Config{
 		M365: credentials.M365{
