@@ -353,6 +353,39 @@ func standaloneNumber(n int) *regexp.Regexp {
 	return regexp.MustCompile(`(^|[^0-9A-Za-z])` + strconv.Itoa(n) + `([^0-9A-Za-z]|$)`)
 }
 
+// stackFrameLine matches one file:line frame line as clues renders them under
+// %+v: a tab, a path, ".go:", a line number, end of line.
+var stackFrameLine = regexp.MustCompile(`(?m)^\t[^\n]*\.go:\d+$`)
+
+// withoutStackFrames removes clues' file:line frame lines from a rendered
+// error before the length check, and only before that check.
+//
+// %+v renders the error's stack - for this test, frames such as
+// pkg/storage/storage.go:37 and s3.go:179 - and a line number is a
+// standalone number, so a frame landing on line 38 is indistinguishable from
+// a leaked 38-character credential length. That is not hypothetical:
+// inserting one comment line near the top of storage.go turns its :37 frame
+// into :38 and fails eight subtests on every run. The paths are also
+// environment-specific, and a directory named 38 would do the same. A frame
+// is a code location from the build and can never carry a credential, so
+// removing frames loses no leak-detection power; the value and prefix checks
+// still run against the full, unstripped surface.
+func withoutStackFrames(surface string) string {
+	return stackFrameLine.ReplaceAllString(surface, "")
+}
+
+// allHex reports whether s consists only of hex digits, which is the shape
+// of a clues_trace and so the shape a substring needle must not have.
+func allHex(s string) bool {
+	for _, r := range s {
+		if !strings.ContainsRune("0123456789abcdefABCDEF", r) {
+			return false
+		}
+	}
+
+	return len(s) > 0
+}
+
 // TestS3Config_Validate_RequiresCredentials_NoOptOut replaces chunk 0.6's
 // TestS3Config_Validate_RejectsBlankCredentialsByDefault, which asserted
 // a *default* and therefore also asserted that an opt-out existed. There
@@ -366,8 +399,18 @@ func standaloneNumber(n int) *regexp.Regexp {
 func (suite *S3CfgUnitSuite) TestS3Config_Validate_RequiresCredentials_NoOptOut() {
 	const (
 		// values that must never appear in an error, in any form
+		//
+		// Every needle the assertions below search for - each value, and
+		// its 4- and 8-character prefixes - must contain a character that
+		// is not a hex digit, because every rendered clues error carries a
+		// clues_trace of eight random hex digits and an all-hex needle
+		// collides with it by chance. accessValue used to begin "4cce",
+		// all hex, and the 4-character prefix check failed on traces such
+		// as b9004cce and 4ccef201: 7 of 20 -count=1000 runs at a2eccd69.
+		// The require just below the table enforces this for every
+		// fixture, so a future one cannot reintroduce the flake quietly.
 		secretValue = "s3cr3t-value-that-must-never-be-echoed"
-		accessValue = "4cce55-value-that-must-never-be-echoed"
+		accessValue = "akid55-value-that-must-never-be-echoed"
 		blankTab    = "\t"
 	)
 
@@ -447,6 +490,18 @@ func (suite *S3CfgUnitSuite) TestS3Config_Validate_RequiresCredentials_NoOptOut(
 			neverEchoes: []string{accessValue},
 		},
 	}
+	// Guard the fixtures themselves: see the comment on the const block.
+	for _, test := range table {
+		for _, value := range test.neverEchoes {
+			for _, needle := range []string{value, value[:4], value[:8]} {
+				require.Falsef(suite.T(), allHex(needle),
+					"%s: credential needle %q is all hex digits and will collide "+
+						"with a random clues_trace; give the fixture a non-hex character "+
+						"in its first four", test.name, needle)
+			}
+		}
+	}
+
 	for _, test := range table {
 		suite.Run(test.name, func() {
 			t := suite.T()
@@ -505,7 +560,7 @@ func (suite *S3CfgUnitSuite) TestS3Config_Validate_RequiresCredentials_NoOptOut(
 					// `len=38`, `"access_key_length": 38`,
 					// `length 38`. See the structural check below, which
 					// is what actually guarantees the typed case.
-					assert.NotRegexpf(t, standaloneNumber(len(value)), surface,
+					assert.NotRegexpf(t, standaloneNumber(len(value)), withoutStackFrames(surface),
 						"%s must never report a credential's length", name)
 				}
 			}
