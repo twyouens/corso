@@ -61,9 +61,16 @@ type Controller struct {
 	// operation, but without touching shared state. A -race run
 	// (TestControllerConcurrency_ProduceBackupCollectionsAndPopulate,
 	// controller_race_test.go) found exactly this read racing against
-	// PopulateProtectedResourceIDAndName's write before that change; it
-	// is kept as a permanent regression test for the write side even
-	// though the read it originally caught is gone.
+	// PopulateProtectedResourceIDAndName's write before that change.
+	//
+	// That test is kept as a permanent regression guard for the read
+	// side, not the write side: with no concurrent reader of
+	// IDNameLookup left in this fork, -race cannot detect an unguarded
+	// write to it alone, so removing mu's protection from
+	// PopulateProtectedResourceIDAndName's write would not be caught by
+	// this test today. What it does catch is ProduceBackupCollections
+	// (or anything else) reintroducing a direct, unguarded read of
+	// IDNameLookup - the exact regression it was written to prevent.
 	//
 	// Maps of resource owner ids to names, and names to ids. Not
 	// guaranteed to be populated, only here as a post-population
