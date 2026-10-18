@@ -171,8 +171,9 @@ func run() error {
 	}
 
 	fmt.Printf(
-		"backup point %s created %s: %d items read, %d bytes uploaded, tags %v\n",
+		"backup point %s (type %s) created %s: %d items read, %d bytes uploaded, tags %v\n",
 		point.ID,
+		point.Type,
 		point.CreatedAt.Format(time.RFC3339),
 		point.ItemsRead,
 		point.BytesUploaded,
@@ -186,7 +187,7 @@ func run() error {
 	fmt.Printf("found %d backup point(s) for object %s:\n", len(points), userID)
 
 	for _, p := range points {
-		fmt.Printf("  %s (created %s, tags %v)\n", p.ID, p.CreatedAt.Format(time.RFC3339), p.Tags)
+		fmt.Printf("  %s (type %s, created %s, tags %v)\n", p.ID, p.Type, p.CreatedAt.Format(time.RFC3339), p.Tags)
 	}
 
 	return nil

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/twyouens/corso/src/internal/model"
 	"github.com/twyouens/corso/src/pkg/backup"
 	"github.com/twyouens/corso/src/pkg/count"
 	"github.com/twyouens/corso/src/pkg/selectors"
@@ -83,9 +84,17 @@ type BackupPoint struct {
 	// DeleteBackupPoints or a future chunk's browse/restore API. Never a
 	// secret.
 	ID string
+	// Type classifies this backup point - see BackupPointType's own doc
+	// comment for what each value means and, in particular, why only
+	// BackupPointTypeMerge is independently restorable.
+	Type BackupPointType
 	// Tags are exactly the tags this backup was created with (via
 	// BackupRequest.Tags), plus the fork's own "service" and
-	// "backup-type" bookkeeping tags.
+	// "backup-type" bookkeeping tags. Type above is derived from the
+	// "backup-type" entry here (via pkg/backup.Backup.Type(), not by this
+	// package re-reading the tag itself); both are provided because a
+	// caller may still want the raw string for display or audit
+	// purposes, even though Type is what any logic should branch on.
 	Tags map[string]string
 	// CreatedAt is when this backup point was created.
 	CreatedAt time.Time
@@ -98,6 +107,64 @@ type BackupPoint struct {
 	// encountered. Zero does not guarantee the backup is complete -
 	// Backup itself returns a non-nil error for anything worse.
 	ErrorCount int
+}
+
+// BackupPointType classifies a BackupPoint by the fork's own internal
+// merge/assist/preview distinction, exposed here as a typed, documented
+// value specifically so a caller outside this module never has to
+// hardcode the literal tag value ("backup-type") or the literal strings
+// the fork's internal/model package uses ("merge-backup", "assist-backup",
+// "preview-backup") to tell them apart - both of which a k3ep build
+// cannot name directly (internal/model is not importable from outside
+// this module), so without this type, the only way to interpret
+// BackupPoint.Tags["backup-type"] from k3ep would be to hardcode those
+// exact literals against a key this very package simultaneously reserves
+// callers from setting (see tags.go) - a direct, if accidental, coupling
+// to an internal implementation detail REPO-2 exists to prevent. It also
+// captures pkg/backup.Backup.Type()'s version-aware default for backups
+// older than v8, which never persisted a backup-type tag at all; reading
+// BackupPoint.Tags directly would miss that.
+type BackupPointType string
+
+const (
+	// BackupPointTypeMerge is a complete backup: the only type this
+	// package guarantees is independently restorable. A future restore
+	// chunk should treat any other type as not restorable on its own.
+	BackupPointTypeMerge BackupPointType = "merge"
+	// BackupPointTypeAssist is a partial result from kopia-assisted
+	// incremental backup - typically left behind by a recoverable error
+	// partway through a real backup (see ListBackupPoints' doc comment).
+	// Not independently restorable; useful as a base for a future
+	// backup's own incremental logic, not as a restore target.
+	BackupPointTypeAssist BackupPointType = "assist"
+	// BackupPointTypePreview is a deliberately partial backup (see
+	// control.Options.PreviewLimits). Not independently restorable in
+	// the same sense as a merge backup - it was never meant to be a
+	// complete copy of the source data.
+	BackupPointTypePreview BackupPointType = "preview"
+	// BackupPointTypeUnknown covers any value the fork's own
+	// pkg/backup.Backup.Type() returns that this package does not
+	// recognize - including, deliberately, the empty string Type()
+	// itself documents returning for some pre-v8 backups with no
+	// recorded type at all. Treat it as "do not assume restorable."
+	BackupPointTypeUnknown BackupPointType = "unknown"
+)
+
+// backupPointTypeFrom maps pkg/backup.Backup.Type()'s string result
+// (itself derived from internal/model's tag constants, which this
+// package may reference internally - it is in the same Go module - but
+// never exposes) to the typed, exported BackupPointType above.
+func backupPointTypeFrom(b *backup.Backup) BackupPointType {
+	switch b.Type() {
+	case model.MergeBackup:
+		return BackupPointTypeMerge
+	case model.AssistBackup:
+		return BackupPointTypeAssist
+	case model.PreviewBackup:
+		return BackupPointTypePreview
+	default:
+		return BackupPointTypeUnknown
+	}
 }
 
 // Backup runs one backup and returns the resulting BackupPoint once it
@@ -252,6 +319,7 @@ func cloneTags(tags map[string]string) map[string]string {
 func toBackupPoint(b *backup.Backup) BackupPoint {
 	return BackupPoint{
 		ID:            string(b.ID),
+		Type:          backupPointTypeFrom(b),
 		Tags:          cloneTags(b.Tags),
 		CreatedAt:     b.CreationTime,
 		ItemsRead:     int64(b.ItemsRead),

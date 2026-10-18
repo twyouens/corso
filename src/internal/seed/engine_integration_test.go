@@ -366,6 +366,11 @@ func (suite *EngineIntegrationSuite) TestBackup_TagsProgressDeleteMaintenance() 
 		// the fork's own bookkeeping tag must still be present alongside
 		// the caller's tags, not replaced by them.
 		assert.NotEmpty(t, pointA.Tags["service"])
+		// A real, successful, uninterrupted backup of a seeded mailbox is
+		// a merge backup - proving BackupPointType is actually threaded
+		// through from a live backup, not just unit-tested against a
+		// synthetic *backup.Backup.
+		assert.Equal(t, engine.BackupPointTypeMerge, pointA.Type)
 	})
 
 	suite.Run("ProgressCallbackInvokedAndNoStdout", func() {
