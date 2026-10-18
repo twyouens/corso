@@ -28,7 +28,12 @@ check:
 # Graph calls. Run it through the workspace's credential loader, from the
 # workspace root:
 #
-#   scripts/with-test-tenant.sh make -C worktrees/corso-0.3/src test-integration
+#   scripts/with-test-tenant.sh env GO111MODULE=on make -C worktrees/corso-<id>/src test-integration
+#
+# The `env GO111MODULE=on` is required and easy to lose: this target sets
+# GOWORK=off but not GO111MODULE, and make does not inherit the shell's
+# value into a recipe, so without it the suite fails with "[setup failed]"
+# in GOPATH mode on a machine whose global Go config sets GO111MODULE=off.
 #
 # CORSO_NIGHTLY_TESTS enables the gated suite the same way
 # .github/workflows/nightly-test-tenant.yml does; credential validation
