@@ -2,10 +2,12 @@ package operations
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"github.com/alcionai/clues"
 	"github.com/google/uuid"
+	"github.com/kopia/kopia/repo/manifest"
 
 	"github.com/twyouens/corso/src/internal/common/crash"
 	"github.com/twyouens/corso/src/internal/common/idname"
@@ -1048,22 +1050,71 @@ func (op *BackupOperation) createBackupModels(
 	return nil
 }
 
+// reservedAdditionalTagKeys are the tag keys mergeAdditionalTags (below)
+// never lets a caller-supplied tag (op.AdditionalTags) set, independent of
+// whether createBackupModels already populated that key by the time merge
+// runs. Three sources, each duplicated here as a literal because the real
+// constant is unexported in the package that owns it, same as pkg/engine's
+// own copy of this list (tags.go) documents:
+//   - model.ServiceTag, model.BackupTypeTag: this file's own bookkeeping,
+//     already set in tags before merge runs, so these two are also
+//     covered by the "already present" check below - but listed
+//     explicitly so this list is self-sufficient, not relying on call
+//     order elsewhere in this function to protect them.
+//   - manifest.TypeLabelKey ("type"), and "stableID"/"storeVersion":
+//     rejected by Kopia's ModelStore.Put (internal/kopia/model_store.go's
+//     stableIDKey/modelVersionKey), but only after this backup's snapshot
+//     and details have already uploaded - orphaning both.
+//   - "tenant", and the "sc-" prefix: read and written by this fork's own
+//     backup garbage collector (internal/kopia/cleanup_backups.go's
+//     tenantTag/serviceCatTagPrefix) to decide which assist bases survive
+//     collection for a given tenant and category.
+var reservedAdditionalTagKeys = []string{
+	model.ServiceTag,
+	model.BackupTypeTag,
+	manifest.TypeLabelKey,
+	"stableID",
+	"storeVersion",
+	"tenant",
+}
+
+const reservedAdditionalTagPrefix = "sc-"
+
 // mergeAdditionalTags adds every key in additional to tags that tags does
-// not already contain, mutating tags in place. A key already present in
-// tags - in practice always model.ServiceTag and model.BackupTypeTag, set
-// just above in createBackupModels - is never overwritten.
+// not already contain and that is not reserved (reservedAdditionalTagKeys/
+// reservedAdditionalTagPrefix above), mutating tags in place. A key
+// already present in tags - in practice always model.ServiceTag and
+// model.BackupTypeTag, set just above in createBackupModels - is never
+// overwritten; neither is a reserved key, whether or not tags already
+// happens to carry it.
 //
 // This is what stops a caller-supplied tag (pkg/engine.BackupRequest.Tags)
 // from silently colliding with, and corrupting, the fork's own bookkeeping
-// tags that merge/assist/preview base-selection logic elsewhere depends on.
-// pkg/engine additionally rejects a caller's reserved-key tag outright
-// before a backup ever starts (a better caller experience: a clear error
-// up front, rather than a silently dropped tag); this function is the
-// defense-in-depth backstop for any other caller of AdditionalTags, now or
-// in the future, that skips that check.
+// tags that base-selection, Kopia's model store and this fork's garbage
+// collector each depend on. pkg/engine additionally rejects a caller's
+// reserved-key tag outright before a backup ever starts (a better caller
+// experience: a clear error up front, rather than a silently dropped
+// tag); this function is the defense-in-depth backstop for any other
+// caller of AdditionalTags, now or in the future, that skips that check -
+// and, unlike an earlier version of this function and its doc comment, it
+// now actually covers the full reserved set, not just the two keys that
+// happened to already be present in tags by the time it runs.
 func mergeAdditionalTags(tags, additional map[string]string) {
+	reserved := make(map[string]struct{}, len(reservedAdditionalTagKeys))
+	for _, k := range reservedAdditionalTagKeys {
+		reserved[k] = struct{}{}
+	}
+
 	for k, v := range additional {
 		if _, exists := tags[k]; exists {
+			continue
+		}
+
+		if _, isReserved := reserved[k]; isReserved {
+			continue
+		}
+
+		if strings.HasPrefix(k, reservedAdditionalTagPrefix) {
 			continue
 		}
 
