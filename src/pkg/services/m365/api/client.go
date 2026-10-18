@@ -154,8 +154,12 @@ func newLargeItemService(
 	//
 	// NoTimeout() is appended *last* and so always wins: a caller cannot take
 	// the no-timeout property away from the large-item client, which is the
-	// only reason that client exists. Pinned by graph's
-	// TestPopulateConfig_LastOptionWins.
+	// only reason that client exists. Pinned at this call site by
+	// TestNewClient_LargeItemKeepsNoTimeoutOverACallerTimeout, which builds a
+	// client with graph.Timeout and reads the timeout off LargeItem's actual
+	// http.Client; graph's TestPopulateConfig_LastOptionWins pins only the
+	// option-ordering semantics this relies on, and on its own would stay
+	// green if NoTimeout() were moved to the front of this slice.
 	//
 	// A fresh slice, not append(opts, ...), so this call can never write into
 	// spare capacity in its caller's own opts backing array.

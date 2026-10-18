@@ -199,6 +199,13 @@ type clientConfig struct {
 	// installed limiter: a test that reads the requested value cannot tell
 	// whether the request was honoured.
 	installedConcurrencyLimiter *concurrencyLimiterMiddleware
+	// installedHTTPClient is the http.Client this config was applied to,
+	// recorded by apply so HTTPClientTimeout() can report the timeout the
+	// client's requests are actually subject to, read from the client itself
+	// rather than from the timeout field above.  Same reasoning as
+	// installedConcurrencyLimiter: a guard that reads the requested value
+	// restates the configuration instead of checking it was honoured.
+	installedHTTPClient *http.Client
 
 	appendMiddleware []khttp.Middleware
 }
@@ -222,9 +229,11 @@ func populateConfig(opts ...Option) *clientConfig {
 	return &cc
 }
 
-// apply updates the http.Client with the expected options.
+// apply updates the http.Client with the expected options, and records the
+// client so the adapter built on it can report what was actually applied.
 func (c *clientConfig) apply(hc *http.Client) {
 	hc.Timeout = c.timeout
+	c.installedHTTPClient = hc
 }
 
 // NoTimeout sets the httpClient.Timeout to 48 hours (eg: unlimited).
@@ -434,6 +443,23 @@ func (aw *adapterWrap) ConcurrencyLimit() int {
 	}
 
 	return cap(aw.config.installedConcurrencyLimiter.semaphore)
+}
+
+// HTTPClientTimeout reports the Timeout of the http.Client this adapter sends
+// its requests through, read from that client rather than from the timeout
+// the caller requested.  A client never applied reports 0.
+//
+// Like ConcurrencyLimit, adapterWrap is unexported, so this is reachable only
+// by structural assertion, and nothing in this fork's non-test code reads it.
+// It exists so api's tests can guard a call-site property that no test in
+// this package can see: that api.newLargeItemService's client really keeps
+// NoTimeout even when api.NewClient's caller passes graph.Timeout.
+func (aw *adapterWrap) HTTPClientTimeout() time.Duration {
+	if aw.config == nil || aw.config.installedHTTPClient == nil {
+		return 0
+	}
+
+	return aw.config.installedHTTPClient.Timeout
 }
 
 // Graph may abruptly close connections, which we should retry.
