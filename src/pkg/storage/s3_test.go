@@ -1,6 +1,8 @@
 package storage
 
 import (
+	"encoding/json"
+	"fmt"
 	"net"
 	"reflect"
 	"strconv"
@@ -349,8 +351,9 @@ func (suite *S3CfgUnitSuite) TestS3Config_ApplyConfigOverrides_RequiresExplicitC
 // echoes the value, not even a prefix or a length.
 func (suite *S3CfgUnitSuite) TestS3Config_Validate_RequiresCredentials_NoOptOut() {
 	const (
-		// a value that must never appear in an error, in any form
+		// values that must never appear in an error, in any form
 		secretValue = "s3cr3t-value-that-must-never-be-echoed"
+		accessValue = "4cce55-value-that-must-never-be-echoed"
 		blankTab    = "\t"
 	)
 
@@ -364,6 +367,22 @@ func (suite *S3CfgUnitSuite) TestS3Config_Validate_RequiresCredentials_NoOptOut(
 			name:        "missing both",
 			cfg:         S3Config{Bucket: "bkt"},
 			expectField: accessKeyFieldName,
+		},
+		{
+			// The case that gives the no-echo assertions below
+			// something to bite on. Where a *credential* is the missing
+			// field its own value is blank by definition, so an error
+			// that echoed it would echo nothing; the realistic leak is
+			// an error that reports the credentials it did find, or
+			// dumps the whole config, while complaining about something
+			// else. A missing bucket with both credentials present is
+			// exactly that shape.
+			name: "missing bucket, credentials present",
+			cfg: S3Config{
+				AWS: credentials.AWS{AccessKey: accessValue, SecretKey: secretValue},
+			},
+			expectField: Bucket,
+			neverEchoes: []string{accessValue, secretValue},
 		},
 		{
 			name:        "empty access key",
@@ -391,27 +410,27 @@ func (suite *S3CfgUnitSuite) TestS3Config_Validate_RequiresCredentials_NoOptOut(
 		},
 		{
 			name:        "missing secret key",
-			cfg:         S3Config{Bucket: "bkt", AWS: credentials.AWS{AccessKey: secretValue}},
+			cfg:         S3Config{Bucket: "bkt", AWS: credentials.AWS{AccessKey: accessValue}},
 			expectField: secretKeyFieldName,
-			neverEchoes: []string{secretValue},
+			neverEchoes: []string{accessValue},
 		},
 		{
 			name: "whitespace-only secret key",
 			cfg: S3Config{
 				Bucket: "bkt",
-				AWS:    credentials.AWS{AccessKey: secretValue, SecretKey: "   "},
+				AWS:    credentials.AWS{AccessKey: accessValue, SecretKey: "   "},
 			},
 			expectField: secretKeyFieldName,
-			neverEchoes: []string{secretValue},
+			neverEchoes: []string{accessValue},
 		},
 		{
 			name: "tab-only secret key",
 			cfg: S3Config{
 				Bucket: "bkt",
-				AWS:    credentials.AWS{AccessKey: secretValue, SecretKey: blankTab},
+				AWS:    credentials.AWS{AccessKey: accessValue, SecretKey: blankTab},
 			},
 			expectField: secretKeyFieldName,
-			neverEchoes: []string{secretValue},
+			neverEchoes: []string{accessValue},
 		},
 	}
 	for _, test := range table {
@@ -422,19 +441,45 @@ func (suite *S3CfgUnitSuite) TestS3Config_Validate_RequiresCredentials_NoOptOut(
 			require.Error(t, err, "no S3 config may validate without both credentials")
 			assert.ErrorIs(t, err, errMissingRequired)
 
-			msg := err.Error() + " " + clues.ToCore(err).Msg
+			// Every surface a credential could leak through, not just
+			// err.Error(): chunk 0.6's review found this error type
+			// leaking through some encoders and not others, and a clues
+			// error carries values and labels that Error() does not
+			// print but a structured logger does. An earlier version of
+			// this test checked only Error() and ToCore().Msg, and a
+			// mutation that attached both credentials to the error with
+			// clues' own .With() passed it unnoticed.
+			core := clues.ToCore(err)
+			surfaces := map[string]string{
+				"Error()":      err.Error(),
+				"ToCore().Msg": core.Msg,
+				"ToCore()":     fmt.Sprintf("%+v", core),
+				"%v":           fmt.Sprintf("%v", err),
+				"%+v":          fmt.Sprintf("%+v", err),
+				"values":       fmt.Sprintf("%+v", core.Values),
+				"labels":       fmt.Sprintf("%+v", core.Labels),
+			}
+
+			coreJSON, jsonErr := json.Marshal(core)
+			require.NoError(t, jsonErr)
+			surfaces["json"] = string(coreJSON)
+
+			msg := err.Error() + " " + core.Msg
 			assert.Contains(t, msg, test.expectField, "the error must name the missing field")
 
-			for _, value := range test.neverEchoes {
-				assert.NotContains(t, msg, value, "the error must never echo a credential value")
+			for name, surface := range surfaces {
+				for _, value := range test.neverEchoes {
+					assert.NotContainsf(t, surface, value,
+						"%s must never echo a credential value", name)
 
-				for _, prefixLen := range []int{4, 8} {
-					assert.NotContains(t, msg, value[:prefixLen],
-						"the error must never echo even a prefix of a credential value")
+					for _, prefixLen := range []int{4, 8} {
+						assert.NotContainsf(t, surface, value[:prefixLen],
+							"%s must never echo even a prefix of a credential value", name)
+					}
+
+					assert.NotContainsf(t, surface, strconv.Itoa(len(value)),
+						"%s must never report a credential's length", name)
 				}
-
-				assert.NotContains(t, msg, strconv.Itoa(len(value)),
-					"the error must never report a credential's length")
 			}
 
 			// and the same config cannot produce a usable Storage
