@@ -174,14 +174,43 @@ func addLibraryFile(t *testing.T, b *details.Builder, library, itemID, name stri
 		}))
 }
 
-// addList appends one SharePoint list to b. A list is recorded as a
-// single entry with no folder entries at all, and its title lives under
-// List rather than in ItemName.
+// addList appends one SharePoint list to b.
+//
+// The shape here is the one a real backup produces, confirmed against the
+// test tenant: a list sits in a container whose recorded location is the
+// list's own Microsoft 365 ID (the fork records no display name for it),
+// and the list itself is a single item carrying the title under List -
+// not ItemName - plus a count of the rows inside it. The rows are not
+// separate entries.
 func addList(t *testing.T, b *details.Builder, listID, name string, itemCount int64) {
 	t.Helper()
 
 	rr, err := path.Build(testTenant, testSite, path.SharePointService, path.ListsCategory, true,
-		listID)
+		listID, listID)
+	require.NoError(t, err)
+
+	require.NoError(t, b.Add(
+		rr,
+		path.Builder{}.Append(listID),
+		details.ItemInfo{
+			SharePoint: &details.SharePointInfo{
+				ItemType: details.SharePointList,
+				List:     &details.ListInfo{Name: name, ItemCount: itemCount},
+				Created:  fileCreated,
+				Modified: fileModified,
+			},
+		}))
+}
+
+// addLocationlessItem appends an item the backup recorded with no
+// location at all. No v1 workload produces one - verified live - but
+// browse must report it rather than drop it or panic, so this exists to
+// cover Item.FolderID's documented "" case.
+func addLocationlessItem(t *testing.T, b *details.Builder, itemID, name string) {
+	t.Helper()
+
+	rr, err := path.Build(testTenant, testSite, path.SharePointService, path.ListsCategory, true,
+		itemID)
 	require.NoError(t, err)
 
 	require.NoError(t, b.Add(
@@ -190,9 +219,7 @@ func addList(t *testing.T, b *details.Builder, listID, name string, itemCount in
 		details.ItemInfo{
 			SharePoint: &details.SharePointInfo{
 				ItemType: details.SharePointList,
-				List:     &details.ListInfo{Name: name, ItemCount: itemCount},
-				Created:  fileCreated,
-				Modified: fileModified,
+				List:     &details.ListInfo{Name: name},
 			},
 		}))
 }
@@ -212,7 +239,7 @@ func seededDetails(t *testing.T) *details.Builder {
 	addDriveFile(t, b, "file-001", "k3ep-seed-file-001.txt", 34, false, "k3ep-seed")
 	addDriveFile(t, b, "file-002", "k3ep-seed-file-002.txt", 52, false, "k3ep-seed")
 	addLibraryFile(t, b, "k3ep-seed-library", "doc-001", "k3ep-seed-doc-001.txt", 40)
-	addList(t, b, "list-001", "k3ep-seed-list", 2)
+	addList(t, b, "list-0000-1111", "k3ep-seed-list", 2)
 
 	return b
 }
@@ -308,6 +335,7 @@ func TestListFolders_TreeCoversEveryWorkload(t *testing.T) {
 			"k3ep-seed-calendar",
 			"k3ep-seed-contacts",
 			"k3ep-seed-mail",
+			"list-0000-1111", // a list's container is named by its list ID
 			"root:",
 			"root:",
 			"root:/k3ep-seed",
@@ -486,6 +514,9 @@ func TestListItems_ReturnsIDNameSizeAndDates(t *testing.T) {
 	list, err := r.ListItems(ctx, ItemsRequest{BackupPointID: id})
 	require.NoError(t, err)
 
+	tree, err := r.ListFolders(ctx, FolderTreeRequest{BackupPointID: id})
+	require.NoError(t, err)
+
 	assert.Equal(t, id, list.BackupPointID)
 	assert.True(t, list.IndependentlyRestorable)
 
@@ -495,11 +526,11 @@ func TestListItems_ReturnsIDNameSizeAndDates(t *testing.T) {
 	assert.Equal(
 		t,
 		[]string{
-			"k3ep-seed-list",         // no folder: empty folder path sorts first
 			"k3ep-seed-event-001",    // k3ep-seed-calendar
 			"k3ep-seed-contact-001",  // k3ep-seed-contacts
 			"k3ep-seed-mail-001",     // k3ep-seed-mail
 			"k3ep-seed-mail-002",     // k3ep-seed-mail
+			"k3ep-seed-list",         // list-0000-1111 (the list's own container)
 			"k3ep-seed-doc-001.txt",  // root: (the library drive)
 			"k3ep-seed-file-001.txt", // root:/k3ep-seed
 			"k3ep-seed-file-002.txt", // root:/k3ep-seed
@@ -544,20 +575,18 @@ func TestListItems_ReturnsIDNameSizeAndDates(t *testing.T) {
 	assert.Equal(t, "libraries", doc.Category)
 	assert.Equal(t, "k3ep-seed-library", doc.DriveName)
 
-	// A SharePoint list has no folder entries, so it lists with no
-	// folder - and its name comes from its list info, not ItemName.
+	// A SharePoint list's name comes from its list info, not ItemName,
+	// and its container folder is named by the list's own ID.
 	lst := byName["k3ep-seed-list"]
 	assert.Equal(t, "lists", lst.Category)
 	assert.Equal(t, int64(2), lst.ItemCount,
 		"a list reports how many rows the backup captured inside it, since they are not separate items")
-	assert.Empty(t, lst.FolderID, "a SharePoint list sits outside any folder")
-	assert.Empty(t, lst.FolderPath)
+	assert.Equal(t, "list-0000-1111", lst.FolderPath,
+		"a list's container is recorded under the list's own ID, not its title")
+	assert.Equal(t, folderByPath(t, tree.Folders, "list-0000-1111").ID, lst.FolderID)
 
 	// Every item's FolderID, where set, must name a folder ListFolders
 	// actually returns.
-	tree, err := r.ListFolders(ctx, FolderTreeRequest{BackupPointID: id})
-	require.NoError(t, err)
-
 	for _, it := range list.Items {
 		if len(it.FolderID) == 0 {
 			continue
@@ -566,6 +595,31 @@ func TestListItems_ReturnsIDNameSizeAndDates(t *testing.T) {
 		assert.True(t, folderExists(tree.Folders, it.FolderID),
 			"item %s names folder %s, which ListFolders does not return", it.ID, it.FolderID)
 	}
+}
+
+// TestListItems_ItemWithNoRecordedLocationStillLists covers
+// Item.FolderID's documented "" case. No v1 workload produces such an
+// entry - every item the test tenant's own backups record sits in a
+// folder, including a SharePoint list - but browse must report one
+// rather than drop it, because an item it silently omitted would be
+// invisible to restore and to erasure alike.
+func TestListItems_ItemWithNoRecordedLocationStillLists(t *testing.T) {
+	ctx, flush := tester.NewContext(t)
+	defer flush()
+
+	b := &details.Builder{}
+	addLocationlessItem(t, b, "orphan-001", "an-item-with-no-location")
+
+	r, id, _ := repoWithDetails(t, b.Details(), model.MergeBackup)
+
+	list, err := r.ListItems(ctx, ItemsRequest{BackupPointID: id})
+	require.NoError(t, err)
+
+	require.Len(t, list.Items, 1, "an item with no recorded location must still be listed")
+	assert.Equal(t, "an-item-with-no-location", list.Items[0].Name)
+	assert.Empty(t, list.Items[0].FolderID)
+	assert.Empty(t, list.Items[0].FolderPath)
+	assert.NotEmpty(t, list.Items[0].ID)
 }
 
 // TestListItems_IDsAreStableAcrossSeparateCalls is the brief's own

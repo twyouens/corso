@@ -158,28 +158,34 @@ func folderNamed(t *testing.T, folders []engine.Folder, category, name string) e
 // assertManifestItem checks one browse item against the seeder's own
 // manifest entry for it.
 //
-// Two normalisations, both deliberate and both documented rather than
-// papered over:
+// wantFolderPath is passed in rather than taken from want.FolderPath
+// because the seed manifest and a backup's own details manifest use
+// different - both correct - conventions for saying where an item lives,
+// and the mapping differs per workload. Each call site states its own
+// mapping explicitly instead of this helper applying a blanket
+// normalisation that would quietly hide a genuine mismatch:
 //
-//   - Drive folder paths. The manifest records a drive item's folder path
-//     from the drive's root downwards ("k3ep-seed"), while browse reports
-//     the tree the backup actually recorded, which starts at the drive's
-//     own root element ("root:/k3ep-seed"). Neither is wrong; they are
-//     different conventions for the same place, so the root prefix is
-//     stripped before comparing.
-//   - Timestamps to the second. Both sides read the same Graph
-//     createdDateTime/lastModifiedDateTime, but each round-trips through
-//     its own JSON encoding (the seed manifest's, and the backup details
-//     manifest's) on the way here, so sub-second precision is not
-//     guaranteed to survive identically.
-func assertManifestItem(t *testing.T, want ManifestItem, got engine.Item) {
+//   - Exchange mail, calendar and contacts: identical, the container's
+//     display name.
+//   - OneDrive: the manifest counts from the drive's root downwards
+//     ("k3ep-seed"); a backup records the drive's own root element too
+//     ("root:/k3ep-seed").
+//   - A SharePoint document library: the manifest names the library; a
+//     backup treats the library as a drive, so the folder is that
+//     drive's "root:" and the library's name is on DriveName.
+//   - A SharePoint list: the manifest names the list; a backup records
+//     the container under the list's own Microsoft 365 ID.
+//
+// Timestamps are compared to the second. Both sides read the same Graph
+// createdDateTime/lastModifiedDateTime, but each round-trips through its
+// own JSON encoding on the way here, so sub-second precision is not
+// guaranteed to survive identically.
+func assertManifestItem(t *testing.T, want ManifestItem, got engine.Item, wantFolderPath string) {
 	t.Helper()
 
 	assert.Equal(t, want.Name, got.Name)
 
-	gotFolder := strings.TrimPrefix(got.FolderPath, "root:")
-	gotFolder = strings.TrimPrefix(gotFolder, "/")
-	assert.Equal(t, want.FolderPath, gotFolder,
+	assert.Equal(t, wantFolderPath, got.FolderPath,
 		"item %q is in the wrong folder", want.Name)
 
 	assert.NotEmpty(t, got.ID, "item %q must carry a stable ID", want.Name)
@@ -313,7 +319,7 @@ func (suite *BrowseIntegrationSuite) TestBrowse_SeededObjectMatchesManifest() {
 		for _, want := range byKind["message"] {
 			msg, ok := got[want.Name]
 			require.True(t, ok, "seeded message %q is missing from the backup point", want.Name)
-			assertManifestItem(t, want, msg)
+			assertManifestItem(t, want, msg, want.FolderPath)
 			assert.Equal(t, folder.ID, msg.FolderID)
 			assert.Equal(t, "email", msg.Category)
 		}
@@ -347,7 +353,7 @@ func (suite *BrowseIntegrationSuite) TestBrowse_SeededObjectMatchesManifest() {
 		for _, want := range byKind["event"] {
 			evt, ok := got[want.Name]
 			require.True(t, ok, "seeded event %q is missing from the backup point", want.Name)
-			assertManifestItem(t, want, evt)
+			assertManifestItem(t, want, evt, want.FolderPath)
 			assert.Equal(t, "events", evt.Category)
 		}
 
@@ -363,7 +369,7 @@ func (suite *BrowseIntegrationSuite) TestBrowse_SeededObjectMatchesManifest() {
 
 		seriesItem, ok := got[series.Name]
 		require.True(t, ok, "the recurring series is missing from the backup point")
-		assertManifestItem(t, series, seriesItem)
+		assertManifestItem(t, series, seriesItem, series.FolderPath)
 
 		// A recurring series is exactly ONE browsable item. Its exception
 		// occurrence is serialised inside the series master (see
@@ -415,7 +421,7 @@ func (suite *BrowseIntegrationSuite) TestBrowse_SeededObjectMatchesManifest() {
 		for _, want := range byKind["contact"] {
 			contact, ok := got[want.Name]
 			require.True(t, ok, "seeded contact %q is missing from the backup point", want.Name)
-			assertManifestItem(t, want, contact)
+			assertManifestItem(t, want, contact, want.FolderPath)
 			assert.Equal(t, "contacts", contact.Category)
 		}
 
@@ -458,7 +464,7 @@ func (suite *BrowseIntegrationSuite) TestBrowse_SeededObjectMatchesManifest() {
 		for _, want := range byKind["file"] {
 			file, ok := got[want.Name]
 			require.True(t, ok, "seeded file %q is missing from the backup point", want.Name)
-			assertManifestItem(t, want, file)
+			assertManifestItem(t, want, file, "root:/"+want.FolderPath)
 			assert.Equal(t, "files", file.Category)
 			assert.Equal(t, want.ResourceID, file.DriveID)
 		}
@@ -508,8 +514,12 @@ func (suite *BrowseIntegrationSuite) TestBrowse_SeededObjectMatchesManifest() {
 		for _, want := range libraryByKind["file"] {
 			file, ok := got[want.Name]
 			require.True(t, ok, "seeded library file %q is missing", want.Name)
-			assertManifestItem(t, want, file)
+			// The manifest's folder path for a library file names the
+			// library; the backup records it as that drive's own root,
+			// with the library's name on DriveName.
+			assertManifestItem(t, want, file, "root:")
 			assert.Equal(t, "libraries", file.Category)
+			assert.Equal(t, want.FolderPath, file.DriveName)
 			assert.Equal(t, wantLibrary.Name, file.DriveName)
 		}
 
@@ -537,8 +547,17 @@ func (suite *BrowseIntegrationSuite) TestBrowse_SeededObjectMatchesManifest() {
 
 		require.NotEmpty(t, listItem.ID,
 			"the seeded list %q is missing from the backup point", wantList.Name)
-		assertManifestItem(t, wantList, listItem)
-		assert.Empty(t, listItem.FolderID, "a list sits outside any folder")
+
+		// A list's container is recorded under the list's own Microsoft
+		// 365 ID, not its title - which the manifest also records, so
+		// this is still a manifest-driven assertion rather than a
+		// hardcoded one.
+		assertManifestItem(t, wantList, listItem, wantList.ID)
+
+		listFolder := folderNamed(t, tree.Folders, "lists", wantList.ID)
+		assert.Equal(t, listFolder.ID, listItem.FolderID)
+		assert.Empty(t, listFolder.ParentID)
+
 		assert.Equal(t, int64(len(listByKind["list_item"])), listItem.ItemCount,
 			"the list must report as many rows as the manifest seeded into it")
 

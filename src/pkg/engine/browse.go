@@ -112,13 +112,9 @@ const (
 )
 
 // Folder is one container inside a backup point: a mail folder, a
-// calendar, a contacts folder, a OneDrive folder, or a folder inside a
-// SharePoint document library (RES-1). Every field is a plain Go type.
-//
-// A SharePoint list is not a Folder. Lists are backed up as single
-// entries rather than as containers of child entries, so a list appears
-// in ListItems as an Item whose Category is "lists", not in ListFolders.
-// See ListFolders' own doc comment.
+// calendar, a contacts folder, a OneDrive folder, a folder inside a
+// SharePoint document library, or a SharePoint list's own container
+// (RES-1). Every field is a plain Go type.
 type Folder struct {
 	// ID identifies this folder within this backup point, stably: the
 	// same folder in the same backup point is the same ID on every call,
@@ -143,6 +139,14 @@ type Folder struct {
 
 	// Name is the folder's Microsoft 365 display name, exactly as the
 	// backup recorded it. Real content: see this file's note on names.
+	//
+	// One documented exception, confirmed against the real test tenant
+	// rather than assumed: for a SharePoint list's container (Category
+	// "lists") the backup records no display name, only the list's own
+	// Microsoft 365 list ID, so that ID is what Name and Path carry. The
+	// list's human title is on the Item inside it - there is exactly one,
+	// the list itself. A caller rendering a tree should label a "lists"
+	// container from the item inside it, not from this field.
 	Name string
 
 	// Path is Name prefixed by every ancestor folder's display name,
@@ -212,9 +216,12 @@ type Item struct {
 	ID string
 
 	// FolderID is the ID of the Folder this item sits in, or "" for an
-	// item the backup point recorded outside any folder (a SharePoint
-	// list is the normal case). ListFolders on the same backup point
-	// returns the matching Folder.
+	// item the backup point recorded outside any folder. Every item every
+	// v1 workload produces does sit in a folder - including a SharePoint
+	// list, whose container is named by its list ID (see Folder.Name) -
+	// so "" here means the backup recorded no location for this item, not
+	// that it belongs at the top of the tree. ListFolders on the same
+	// backup point returns the matching Folder.
 	FolderID string
 
 	// FolderPath is that folder's Path - repeated here so a caller
@@ -256,8 +263,10 @@ type Item struct {
 	// that can be listed here (and, when 5.1 and 7.3 arrive, the unit
 	// they will be handed). This count is the only thing browse can say
 	// about what is inside one, and it is what an admin needs in order to
-	// recognise the list they are looking at. Zero for every other kind
-	// of item, where it means nothing rather than "empty".
+	// recognise the list they are looking at. Confirmed live: a list
+	// seeded with two rows reports ItemCount 2 and lists as one item.
+	// Zero for every other kind of item, where it means nothing rather
+	// than "empty".
 	ItemCount int64
 
 	// Service and Category are as described on Folder.
@@ -415,10 +424,13 @@ type FoundItem struct {
 //   - For OneDrive and SharePoint libraries the top of each drive's tree
 //     is the drive's own root element ("root:"), with the drive named in
 //     Folder.DriveName.
-//   - SharePoint lists are not folders; they appear in ListItems as
-//     items whose Category is "lists". A document library, likewise, is
-//     a drive rather than a folder entry: it is identified by the
-//     DriveID/DriveName on the folders and items inside it.
+//   - A SharePoint document library is a drive, not a folder entry: it
+//     is identified by the DriveID/DriveName on the folders and items
+//     inside it, whose own top-level folder is the drive's "root:".
+//   - A SharePoint list does get a container folder, but one named by
+//     the list's own Microsoft 365 ID rather than its title (see
+//     Folder.Name), holding exactly one item: the list itself, whose
+//     Name is the title and whose ItemCount is how many rows it holds.
 //
 // Returns ErrIncompleteBackupPoint for a point that is not independently
 // restorable unless the request opts in - read that error's doc comment
