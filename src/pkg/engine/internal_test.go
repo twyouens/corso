@@ -72,12 +72,17 @@ func TestToBackupPoint(t *testing.T) {
 
 // TestBackupPointTypeFrom proves BackupPointType correctly classifies
 // every backup-type tag value the fork's internal/model package uses
-// (merge, assist, preview), plus the two edge cases
-// pkg/backup.Backup.Type() itself documents: a pre-v8 backup with no
-// recorded type at all (defaults to merge), and any other/missing value
-// (unknown) - so k3ep never has to hardcode internal/model's string
-// literals itself to tell these apart (see BackupPointType's own doc
-// comment for why that matters).
+// (merge, assist, preview), plus the edge cases
+// pkg/backup.Backup.Type() itself documents: a genuine pre-v8 backup
+// with no recorded type at all (a positive Version, defaults to merge),
+// and any other/missing value (unknown) - so k3ep never has to hardcode
+// internal/model's string literals itself to tell these apart (see
+// BackupPointType's own doc comment for why that matters). Also proves
+// chunk 0.6's review round-4 fix: an untagged model with a zero
+// (unset) Version is Unknown, not Merge, even though
+// pkg/backup.Backup.Type() itself would default it to merge-backup -
+// Version 0 is never a genuine pre-v8 backup, only a model some other
+// tool or a legacy/partial write left with no Version recorded.
 func TestBackupPointTypeFrom(t *testing.T) {
 	table := []struct {
 		name   string
@@ -122,6 +127,22 @@ func TestBackupPointTypeFrom(t *testing.T) {
 			expect: BackupPointTypeUnknown,
 		},
 		{
+			name: "no tag, zero (unset) version is unknown, not a false merge",
+			b: &backup.Backup{
+				BaseModel: model.BaseModel{Tags: map[string]string{}},
+				Version:   0,
+			},
+			expect: BackupPointTypeUnknown,
+		},
+		{
+			name: "no tag, negative non-NoBackup version is unknown",
+			b: &backup.Backup{
+				BaseModel: model.BaseModel{Tags: map[string]string{}},
+				Version:   -2,
+			},
+			expect: BackupPointTypeUnknown,
+		},
+		{
 			name: "unrecognized tag value is unknown",
 			b: &backup.Backup{BaseModel: model.BaseModel{
 				Tags: map[string]string{model.BackupTypeTag: "something-new"},
@@ -133,6 +154,32 @@ func TestBackupPointTypeFrom(t *testing.T) {
 	for _, test := range table {
 		t.Run(test.name, func(t *testing.T) {
 			assert.Equal(t, test.expect, backupPointTypeFrom(test.b))
+		})
+	}
+}
+
+// TestBackupPointType_IsIndependentlyRestorable proves the optional
+// round-4 predicate added so a caller never has to re-derive "only merge
+// is restorable" from this type's own doc comments: merge is the only
+// restorable value, every other defined value and the type's zero value
+// are not.
+func TestBackupPointType_IsIndependentlyRestorable(t *testing.T) {
+	table := []struct {
+		name   string
+		typ    BackupPointType
+		expect bool
+	}{
+		{"merge is restorable", BackupPointTypeMerge, true},
+		{"assist is not restorable", BackupPointTypeAssist, false},
+		{"preview is not restorable", BackupPointTypePreview, false},
+		{"unknown is not restorable", BackupPointTypeUnknown, false},
+		{"zero value is not restorable", BackupPointType(""), false},
+		{"an unrecognized future value is not restorable", BackupPointType("something-new"), false},
+	}
+
+	for _, test := range table {
+		t.Run(test.name, func(t *testing.T) {
+			assert.Equal(t, test.expect, test.typ.IsIndependentlyRestorable())
 		})
 	}
 }

@@ -148,18 +148,55 @@ const (
 	// BackupPointTypeUnknown covers any value the fork's own
 	// pkg/backup.Backup.Type() returns that this package does not
 	// recognize - including, deliberately, the empty string Type()
-	// itself documents returning for some pre-v8 backups with no
-	// recorded type at all. Treat it as "do not assume restorable."
+	// itself documents returning when no backup-type tag is present and
+	// the model's own Version is either the zero value (version.NoBackup -
+	// never a real backup) or newer than v8's migration point (a case
+	// Type()'s own comment says "should not happen" for a genuine
+	// backup, since every version from v8 onward sets the tag). A
+	// genuinely pre-v8 backup with no tag is Type()'s one deliberate
+	// exception: Corso only ever persisted MergeBackup models before v8,
+	// so Type() defaults a missing tag to "merge-backup" there - handled
+	// above by BackupPointTypeMerge, not here. Treat
+	// BackupPointTypeUnknown as "do not assume restorable."
 	BackupPointTypeUnknown BackupPointType = "unknown"
 )
+
+// IsIndependentlyRestorable reports whether a BackupPoint of this type can
+// be restored on its own, with no other backup point involved. Only
+// BackupPointTypeMerge qualifies today; every other value - including any
+// future type this package has not yet defined - is conservatively not
+// restorable. Added per a round-4 review suggestion so a later chunk
+// (browse, restore) has a single typed comparison to call rather than
+// re-deriving "only merge is restorable" from this type's own doc
+// comments at each call site.
+func (t BackupPointType) IsIndependentlyRestorable() bool {
+	return t == BackupPointTypeMerge
+}
 
 // backupPointTypeFrom maps pkg/backup.Backup.Type()'s string result
 // (itself derived from internal/model's tag constants, which this
 // package may reference internally - it is in the same Go module - but
 // never exposes) to the typed, exported BackupPointType above.
+//
+// Type() defaults a missing backup-type tag to merge-backup whenever
+// Version is not version.NoBackup (-1) and is also at or below v8's
+// migration point - which includes an unset, zero Version, never a
+// genuine pre-v8 backup, only a model some other tool, or a legacy or
+// partial write, left with no Version recorded at all. This function
+// does not trust that default blindly: a missing tag with a Version
+// that is not a real positive pre-v8 value classifies Unknown instead
+// of Merge, since Merge is the one type this package documents as
+// independently restorable, and this is the only route by which a
+// model never produced by engine.Backup could otherwise claim it.
 func backupPointTypeFrom(b *backup.Backup) BackupPointType {
+	_, tagged := b.Tags[model.BackupTypeTag]
+
 	switch b.Type() {
 	case model.MergeBackup:
+		if !tagged && b.Version <= 0 {
+			return BackupPointTypeUnknown
+		}
+
 		return BackupPointTypeMerge
 	case model.AssistBackup:
 		return BackupPointTypeAssist
