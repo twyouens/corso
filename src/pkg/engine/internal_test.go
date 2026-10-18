@@ -16,60 +16,6 @@ import (
 	"github.com/twyouens/corso/src/pkg/count"
 )
 
-// TestValidateTags_RejectsReservedKeys proves a caller can never create a
-// backup tagged with the fork's own reserved bookkeeping keys ("service",
-// "backup-type") through this package - this is the first of the two
-// layers described in BackupRequest.Tags' doc comment; the second lives in
-// internal/operations.mergeAdditionalTags.
-func TestValidateTags_RejectsReservedKeys(t *testing.T) {
-	table := []struct {
-		name      string
-		tags      map[string]string
-		expectErr bool
-	}{
-		{
-			name:      "nil tags is fine",
-			tags:      nil,
-			expectErr: false,
-		},
-		{
-			name:      "ordinary caller tags are fine",
-			tags:      map[string]string{"tenant": "t1", "policy": "p1", "object": "o1"},
-			expectErr: false,
-		},
-		{
-			name:      "colliding with service is rejected",
-			tags:      map[string]string{model.ServiceTag: "forged"},
-			expectErr: true,
-		},
-		{
-			name:      "colliding with backup-type is rejected",
-			tags:      map[string]string{model.BackupTypeTag: "forged"},
-			expectErr: true,
-		},
-		{
-			name:      "one reserved key among several others is still rejected",
-			tags:      map[string]string{"tenant": "t1", model.ServiceTag: "forged"},
-			expectErr: true,
-		},
-	}
-
-	for _, test := range table {
-		t.Run(test.name, func(t *testing.T) {
-			err := validateTags(test.tags)
-
-			if test.expectErr {
-				require.Error(t, err)
-				assert.ErrorIs(t, err, ErrReservedTagKey)
-
-				return
-			}
-
-			require.NoError(t, err)
-		})
-	}
-}
-
 func TestCloneTags(t *testing.T) {
 	assert.Nil(t, cloneTags(nil))
 

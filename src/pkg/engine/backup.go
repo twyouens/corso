@@ -6,22 +6,11 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/twyouens/corso/src/internal/model"
 	"github.com/twyouens/corso/src/pkg/backup"
 	"github.com/twyouens/corso/src/pkg/count"
 	"github.com/twyouens/corso/src/pkg/selectors"
 	"github.com/twyouens/corso/src/pkg/store"
 )
-
-// ErrReservedTagKey is returned by Backup when a BackupRequest.Tags key
-// collides with a tag key the fork's own bookkeeping already uses
-// (currently "service" and "backup-type"). Those two tags drive
-// merge/assist/preview base-selection logic for every backup in the
-// repository; letting a caller's tag override one of them, even by
-// accident, could silently corrupt that logic or - the adversarial case -
-// let a caller cross tenant boundaries by forging a tag that is supposed to
-// be reserved for the fork alone.
-var ErrReservedTagKey = errors.New("engine: tag key is reserved by the backup engine")
 
 // ErrEmptyTagFilter is returned by DeleteBackupPoints when called with no
 // tags. Deleting "every backup point with no particular tag" is never
@@ -72,10 +61,14 @@ type BackupRequest struct {
 
 	// Tags are stored on the resulting backup point and are later used to
 	// list or delete it (ListBackupPoints, DeleteBackupPoints) - k3ep uses
-	// tenant, policy and object tags. This package stores and filters by
-	// tags; it never interprets their values. A key that collides with
-	// the fork's own reserved tag keys ("service", "backup-type") is
-	// rejected with ErrReservedTagKey before any backup work starts.
+	// its own "k3ep-tenant", "k3ep-policy" and "k3ep-object" keys,
+	// deliberately namespaced so they can never collide with a key this
+	// package reserves for itself (see tags.go). This package stores and
+	// filters by tags; it never interprets their values. Rejected outright,
+	// before any backup work starts, and before anything is uploaded: a
+	// key that collides with a reserved key or prefix (ErrReservedTagKey,
+	// ErrReservedTagPrefix), more than maxTagCount tags (ErrTooManyTags),
+	// or a key or value over the byte limits in tags.go (ErrTagTooLarge).
 	Tags map[string]string
 
 	// Progress, if non-nil, is called periodically during the backup and
@@ -236,23 +229,6 @@ func (r *Repository) backupsByTag(ctx context.Context, tags map[string]string) (
 	}
 
 	return bs, nil
-}
-
-// validateTags rejects a caller's tag map outright if any key collides
-// with a tag key the fork's own bookkeeping reserves for itself. See
-// ErrReservedTagKey; operations.mergeAdditionalTags inside the fork
-// enforces this too, defensively, for any caller of
-// BackupOperation.AdditionalTags that bypasses this check, but this is the
-// one every caller going through this package actually hits, with a clear
-// error up front instead of a silently dropped tag.
-func validateTags(tags map[string]string) error {
-	for _, reserved := range []string{model.ServiceTag, model.BackupTypeTag} {
-		if _, ok := tags[reserved]; ok {
-			return fmt.Errorf("%w: %q", ErrReservedTagKey, reserved)
-		}
-	}
-
-	return nil
 }
 
 func cloneTags(tags map[string]string) map[string]string {
