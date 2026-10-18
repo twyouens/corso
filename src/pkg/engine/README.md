@@ -589,15 +589,25 @@ and `control.DefaultOptions()` is 4.
 - **A limiter is always installed.** There is no option set, and no code path,
   that produces a Graph client without one; a client built with no options at
   all is bounded at 4.
+- **"Client" is not "repository", and the difference is a factor of two.** One
+  repository builds **two** limited Graph clients, each with its own semaphore
+  at the capacity above: `Stable`, which carries metadata and enumeration
+  calls, and `LargeItem`, which carries mail and event attachments and drive
+  item content. So one repository at `ItemFetch: 4` has an in-flight ceiling of
+  **4 metadata plus 4 large-item requests, not 4 in total** - and the
+  Requester, a third client used for arbitrary URLs and large content
+  downloads, is not limited at all (below). Size a worker from 8 per
+  repository, not 4.
 - **A process's total in-flight Graph requests therefore scale with the number
-  of clients**, not with a single process-wide ceiling: N tenants backing up
-  concurrently get N independent limiters. The engine does not, and cannot,
+  of repositories**, not with a single process-wide ceiling: N tenants backing
+  up concurrently get 2N independent limiters. The engine does not, and cannot,
   cap the process total.
 
-What k3ep must do: size a worker by goroutine, not by process, and treat
+What k3ep must do: size a worker by goroutine, not by process; treat
 `Options.Parallelism.ItemFetch` as a per-repository setting that takes effect
-for that repository. Do not assume a process-wide ceiling exists, because
-none does - if a worker needs to bound its own total Graph pressure across
+for that repository; and when planning capacity, count **two** limiters of
+that width per open repository plus an unlimited content-download client, not
+one. Do not assume a process-wide ceiling exists, because none does - if a worker needs to bound its own total Graph pressure across
 many tenants, that bound belongs in k3ep, above this API.
 
 Two limits this does **not** change, both of which remain process-wide and

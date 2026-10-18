@@ -141,6 +141,22 @@ func newLargeItemService(
 	counter *count.Bus,
 	opts ...graph.Option,
 ) (*graph.Service, error) {
+	// Every option the caller gave NewClient is forwarded here, not just the
+	// concurrency limit, so an api.Client's two kiota services agree on
+	// retries, backoff and capacity instead of only the first one honouring
+	// them. Before this chunk, newLargeItemService took no options at all and
+	// silently dropped its caller's; narrowing it to the concurrency option
+	// alone would instead mean an explicit graph.ConcurrencyLimit applied to
+	// Stable and not to LargeItem - reintroducing, inside a single
+	// api.Client, exactly the "two clients disagree about capacity" split
+	// this chunk exists to remove. Client.Service() and NewService already
+	// forward options; this was the one constructor that did not.
+	//
+	// NoTimeout() is appended *last* and so always wins: a caller cannot take
+	// the no-timeout property away from the large-item client, which is the
+	// only reason that client exists. Pinned by graph's
+	// TestPopulateConfig_LastOptionWins.
+	//
 	// A fresh slice, not append(opts, ...), so this call can never write into
 	// spare capacity in its caller's own opts backing array.
 	liOpts := make([]graph.Option, 0, len(opts)+1)

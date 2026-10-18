@@ -417,6 +417,45 @@ func (suite *PerClientConcurrencyLimiterUnitSuite) TestConcurrencyLimiter_EveryC
 		"an option-less client is bounded at maxConcurrentRequests, not unbounded")
 }
 
+// TestPopulateConfig_LastOptionWins pins the ordering property that
+// api.NewClient's option forwarding relies on, in the one package where
+// clientConfig's fields are visible.
+//
+// api.newLargeItemService forwards its caller's whole graph.Option slice and
+// appends NoTimeout() last, so a caller cannot take the "no timeout" away
+// from the large-item client - that being the entire reason that client
+// exists - while still having its other options (retries, backoff, an
+// explicit ConcurrencyLimit) apply to both of an api.Client's services. If
+// options ever stopped being applied in order, or NoTimeout stopped being
+// appended last, a caller-supplied Timeout would silently cap large-item
+// downloads at an hour.
+func (suite *PerClientConcurrencyLimiterUnitSuite) TestPopulateConfig_LastOptionWins() {
+	t := suite.T()
+
+	// NoTimeout last: it wins, which is what newLargeItemService needs.
+	assert.Equal(
+		t,
+		defaultNoTimeout,
+		populateConfig(Timeout(time.Second), NoTimeout()).timeout,
+		"NoTimeout appended after a caller's Timeout")
+
+	// And the converse, so the assertion above is about ordering rather than
+	// about NoTimeout being unconditionally special.
+	assert.Equal(
+		t,
+		time.Second,
+		populateConfig(NoTimeout(), Timeout(time.Second)).timeout,
+		"a Timeout applied after NoTimeout")
+
+	// The same ordering is what lets api.NewClient prepend its derived
+	// concurrency limit and still let an explicit option override it.
+	assert.Equal(
+		t,
+		2,
+		populateConfig(ConcurrencyLimit(4), ConcurrencyLimit(2)).concurrencyLimit,
+		"a later ConcurrencyLimit overrides an earlier one")
+}
+
 // ---------------------------------------------------------------------------
 // criterion 2: first-caller-wins cannot come back
 // ---------------------------------------------------------------------------
