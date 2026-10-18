@@ -6,7 +6,113 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased] (beta)
+
+Nothing yet.
+
+## [v0.1.0] (beta) - 2026-10-18
+
+**The first tagged release of this fork, and the first aimed at k3ep as a Go
+library rather than at the Corso CLI.** The git tag is `src/v0.1.0`: the module
+lives in this repository's `src/` subdirectory, so its version tags carry that
+prefix, and Go resolves it as module version `v0.1.0`. A consumer pins it with
+`go get github.com/twyouens/corso/src@v0.1.0`, which records the pin in the
+consumer's own `go.mod`/`go.sum`; no `replace` directive is needed or wanted.
+Note that the git tag and the module version are deliberately different
+strings - `src/v0.1.0` and `v0.1.0` - because the module lives in a
+subdirectory; a bare `v0.1.0` tag would not be a version of this module at
+all. The tag is created by a human, on the release commit, only once CI is
+green on `main`, because a published module version cannot cleanly be
+withdrawn afterwards.
+The guide for library callers is [`src/pkg/engine/README.md`](src/pkg/engine/README.md),
+which also covers local development across both repositories with a Go
+workspace and the `GOWORK=off go build ./... && GOWORK=off go test ./...` check
+every pull request has to pass without one.
+
+This fork restarts its own version numbering at v0.1.0. The `v0.19.0` and
+earlier sections below are upstream Corso's history, kept for provenance; they
+describe a CLI product, not this library API, and their version numbers are not
+comparable to this one.
+
+### What v0.1 offers
+
+- **`pkg/engine`: the single public API a consumer imports.** Open or create a
+  repository with caller-supplied storage settings and encryption key; back up
+  a `pkg/selectors` selection with caller-supplied tags and a progress
+  callback; list and delete backup points by tag; browse a backup point's
+  folder tree, list a folder's items and find items by name; run Kopia
+  maintenance. Every exported signature uses plain Go types or other public
+  `src/pkg` types, so a caller in another module never has to name - and,
+  because Go forbids importing another module's internal packages, never can -
+  an `src/internal` type. Compiled examples live in
+  `src/pkg/engine/example_test.go`; `src/cmd/backupexample` is the same thing
+  as a program that really runs.
+- **A library, not an application.** `pkg/engine` reads no environment
+  variable, configuration file or flag, never writes to stdout, and reports
+  progress only through the caller's callback. The caller supplies everything.
+  One transitive exception, documented rather than glossed: on a context with
+  no logger seeded, the fork's own logger singleton reads `CORSO_LOG_FILE` (or
+  `$HOME`/`$LOCALAPPDATA`/`$XDG_CACHE_HOME`) and creates a log directory under
+  the process user's home, with PII handling defaulting to plaintext. Configure
+  a logger before the first engine call.
+- **Browse without Graph.** The folder tree, item listings and name search read
+  only a backup point's own details manifest: no Microsoft Graph call, no item
+  content fetched or decrypted. A mailbox that no longer exists in Microsoft
+  365 is still browsable, and a search never decrypts stored data.
+- **Credentials and keys are the caller's, explicitly.** S3 storage requires a
+  non-blank access key and secret key everywhere in this fork, with no opt-out
+  and no fallback to an ambient AWS identity. `RepositoryConfig`,
+  `storage.Storage` and `account.Account` redact their credential maps under
+  `fmt`, `encoding/json`, `log/slog`, `zap` and `clues`.
+- **A current dependency set.** Upstream Kopia v0.23.1 (Alcion's Kopia fork and
+  its `replace` directive are gone), Microsoft Graph SDK v1.104.0 with current
+  Kiota, MSAL v1.10.1, Go 1.27, and no `replace` directive on any dependency.
+  Usage telemetry is removed outright rather than made opt-out.
+- **A test-tenant harness.** `src/cmd/seed` fills a Microsoft 365 test tenant
+  with known, prefixed data by idempotent upsert - it never deletes - and
+  writes a manifest that tests assert exact results against.
+
+### What v0.1 deliberately does not do
+
+- **No restore and no export through `pkg/engine`.** It reads backup metadata
+  and deletes whole backup points; that is all. The fork's older
+  `pkg/repository` can restore and export, but it is not the library API: it
+  returns `src/internal` types a caller in another module cannot name.
+- **No item-level erasure and no snapshot rewriting.** Deleting a whole backup
+  point by tag is the only removal this release has.
+- **No row-level handling of SharePoint lists.** The engine records a whole
+  list as one backed-up item with a row count, so browse is list-granular and
+  restore and erasure will be too, pending a spike.
+- **No full-text search.** `FindItemsByName` matches names only.
+- **No notion of a tenant, policy, schedule, catalogue or database.** Tags are
+  strings this library stores and filters on and never interprets - which also
+  means **tags are not an authorisation boundary**: one repository must hold
+  exactly one tenant, and `ListBackupPoints` with no filter returns every point
+  in the repository.
+- **No per-client Microsoft Graph concurrency control.** Opening a repository
+  installs a *process-global* semaphore of 1-4 in-flight Graph requests across
+  every service, shared by every tenant and concurrent backup in the process,
+  latched by the first repository opened - including one that then fails
+  Microsoft 365 authentication. A per-client replacement is planned.
+- **No ambient credential discovery, anywhere.** No EC2/ECS instance role, no
+  shared credentials file, no `AWS_PROFILE`, no SSO, no web identity - for the
+  library or the CLI. Credentials may still be *supplied* to the CLI by flag,
+  config file or `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY`.
+- **No S3 `AssumeRole`,** and S3 TLS handshakes use Go's default 10-second
+  timeout rather than the 60 seconds Alcion's Kopia fork forced; current
+  upstream Kopia exposes no injection point for it.
+- **Redaction is per-encoder and does not cover YAML or `encoding/gob`,** both
+  of which walk the exported credential maps. Measured from outside the module.
+  Persist an opaque reference and rebuild the config from a key manager at use
+  time; if something must be serialised, JSON only.
+- **No stability promise beyond `src/pkg`.** `src/internal` is not importable
+  from another module and its shape will change without notice.
+
+The eleven operational facts a library caller has to know - including the ones
+above - are set out, with what to do about each, in
+[`src/pkg/engine/README.md`](src/pkg/engine/README.md) section 4.
+
 ### Added
+- Added [`src/pkg/engine/README.md`](src/pkg/engine/README.md) (with a pointer left at `docs/library-api.md`), the guide for a consumer writing against `pkg/engine`: the call shape for each capability, the eleven operational facts a caller has to know (tags are not an authorisation boundary; the namespaced tag keys and the reserved ones; assist and preview points in every listing and only merge points restorable; `(BackupPointID, Item.ID)` as the durable item handle; `FindItemsResult.UnreadableBackupPointIDs` as a partial-result signal; the process-global Graph concurrency clamp; explicit-credentials-only S3; redaction covering `fmt`/`json`/`slog`/`zap`/`clues` but not YAML or `encoding/gob`; server-side derivation of storage location and credentials; a SharePoint list as a single item; and the library reading no environment variable, file or flag), the `go.work` and `GOWORK=off` instructions for local development across both repositories, the `go get` line that pins a release, and a recipe for re-proving the public surface from an out-of-module build. Added `src/pkg/engine/example_test.go`, a compiled godoc example per capability area (no `Output:` comment, so they are compiled and never run), which is where every snippet in the guide comes from; and `src/pkg/engine/docs_test.go`'s `TestLibraryAPIDoc_MatchesExportedSurface`, which fails if the guide names an `engine.Symbol` or a `Type.Member` that does not exist, or if an exported top-level declaration is named nowhere in the guide.
 - Audited the Alcion Kopia fork pinned in `src/go.mod` against its upstream base; see `docs/kopia-fork-audit.md` for the fork-only dependency inventory and the recommendation to move to current upstream Kopia.
 - Renamed the Go module path from `github.com/alcionai/corso/src` to `github.com/twyouens/corso/src` for this fork. Every import across `src/` was updated to match; no other behavior changed.
 - Bumped the module's `go` directive (and CI's Go toolchain) from 1.21 to 1.27 (pinned via a separate `toolchain go1.27.2` line), the current stable release available to this fork, and fixed the handful of new `go vet` findings (non-constant printf format strings) and a `staticcheck` finding (unused context) surfaced by the newer toolchain.

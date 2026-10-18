@@ -1,3 +1,22 @@
+> [!IMPORTANT]
+> **Using this fork as a Go library.** `src/pkg/engine` is the library API this
+> fork exists to provide: open an encrypted Kopia repository with a
+> caller-supplied key, back up Microsoft 365 data with caller-supplied tags and
+> a progress callback, browse a backup point's folders and items, find items by
+> name, and list, delete or run maintenance on backup points.
+>
+> - **Start here:** [`src/pkg/engine/README.md`](src/pkg/engine/README.md) — the call
+>   shapes, the operational contract a caller has to know, the `go.work`
+>   instructions for local development across repositories, and the `go get`
+>   line that pins a release.
+> - **Pin a release:** `go get github.com/twyouens/corso/src@v0.1.0` (the module
+>   lives in `src/`, so its git tags carry that prefix: `src/v0.1.0`).
+> - **Reference:** `cd src && GOWORK=off GO111MODULE=on go doc -all ./pkg/engine`.
+> - **Examples:** `src/pkg/engine/example_test.go` (compiled) and
+>   `src/cmd/backupexample` (runnable).
+
+---
+
 > [!NOTE]
 > **This is an active fork maintained by [Daniel Puckett](https://github.com/DanielPuckett).**
 >
