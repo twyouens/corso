@@ -31,8 +31,10 @@ The test-tenant env file must define `AZURE_TENANT_ID`, `AZURE_CLIENT_ID` and `A
 - `src/internal/kopia/` - Kopia wrapper: snapshots, upload, connection, S3 and filesystem storage.
 - `src/cli/` - the original Corso CLI. Kept as a developer and recovery tool, not the product interface.
 - `src/cmd/` - small programs: examples for the library API and the test-tenant seeder. `src/cmd/backupexample` (chunk 0.6) is the library API's own worked example, and the one place that mechanically proves it imports no `internal` package - see its `import_test.go`.
-- `docs/` - fork decisions: the Kopia audit from chunk 0.1, the test-tenant harness from 0.3, and a
-  one-page pointer to the library guide.
+- `docs/` - fork decisions: the Kopia audit from chunk 0.1, the test-tenant harness from 0.3, a
+  one-page pointer to the library guide, and the SharePoint list-granularity findings from 0.11
+  (`docs/sharepoint-list-granularity.md`: what a backed-up list stores, and what row-level restore
+  and erasure would take - read it before touching list restore or erasure).
 - `src/pkg/engine/README.md` - **the k3ep-facing library guide** (chunk 0.8): the call shape for each
   capability, the eleven operational-contract facts a caller has to know, the `go.work` and `GOWORK=off`
   instructions, and how a release is tagged and pinned. It lives inside the module, not in `docs/`, so
