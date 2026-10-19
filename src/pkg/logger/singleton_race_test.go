@@ -5,6 +5,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/alcionai/clues"
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/zap"
 )
@@ -152,4 +153,38 @@ func TestResolvedLogFile_ConcurrentAccess(t *testing.T) {
 	wg.Wait()
 
 	assert.Equal(t, Stderr, GetLogFile(""), "every caller resolved the same log file")
+}
+
+// TestSeed_SettingsApplyOnlyToTheFirstBuild pins the ordering rule
+// pkg/engine's README (sections 4.8 and 4.11) gives callers: Seed's settings,
+// PIIHandling included, take effect only if Seed is the first use of the
+// logger in the process. Once anything has built the lazy default (any
+// logger.Ctx on a context with no logger), Seed returns that logger as it is,
+// and the default's plaintext PII handling stays: identifiers wrapped in
+// clues.Hide are logged in the clear.
+func TestSeed_SettingsApplyOnlyToTheFirstBuild(t *testing.T) {
+	//nolint:forbidigo
+	bg := context.Background()
+
+	const id = "seed-order-fixture-id"
+
+	hashed := Settings{File: Stderr, Format: LFText, Level: LLInfo, PIIHandling: PIIHash}
+
+	resetSingleton(t)
+
+	_ = zslFromCtx(bg)
+	_, _ = Seed(bg, hashed)
+
+	assert.Equal(t, id, clues.Hide(id).Conceal(),
+		"a Seed after the lazy default does not apply its PII handling")
+
+	resetSingleton(t)
+
+	_, _ = Seed(bg, hashed)
+
+	assert.NotEqual(t, id, clues.Hide(id).Conceal(),
+		"a Seed that is the first logger use applies its PII handling")
+
+	// Leave clues as the rest of the fork's tests expect it.
+	t.Cleanup(func() { clues.SetHasher(clues.NoHash()) })
 }
