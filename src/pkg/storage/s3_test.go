@@ -672,3 +672,65 @@ func (suite *S3CfgUnitSuite) TestBuildS3ConfigFromMap_NoMapKeyOptsOutOfCredentia
 		assert.NotContains(t, strings.ToLower(key), "allow")
 	}
 }
+
+// TestS3Config_Validate_RejectsBlankBucket: a bucket name that is empty or
+// only whitespace is missing, the same rule validate() already applies to
+// the access and secret keys. Before 0.12 only the empty string was
+// rejected, so " " or "\t" validated and failed later, against the
+// caller-named endpoint, as a bucket that does not exist.
+//
+// Each case has both credentials present, so the bucket is the only thing
+// that can fail it, and is checked on every route a config reaches
+// validate() by: directly, through NewStorage, and back out of a Storage's
+// config map.
+//
+// "s3:// " is a NewStorage-only case: NewStorage strips the scheme before
+// validating, so it arrives as " ". validate() and a config map read by
+// ToS3Config see the raw value, which is not whitespace-only - and, like the
+// bare "s3://" before this chunk, is not caught on those routes.
+func (suite *S3CfgUnitSuite) TestS3Config_Validate_RejectsBlankBucket() {
+	creds := credentials.AWS{AccessKey: "fixture-access", SecretKey: "fixture-secret"}
+
+	for _, bucket := range []string{"", " ", "\t", " \n ", "s3:// "} {
+		suite.Run(strconv.Quote(bucket), func() {
+			t := suite.T()
+
+			cfg := S3Config{Bucket: bucket, AWS: creds}
+
+			_, err := NewStorage(ProviderS3, &cfg)
+			require.Error(t, err, "NewStorage")
+			assert.ErrorIs(t, err, errMissingRequired)
+			assert.Contains(t, err.Error(), Bucket, "the error names the missing field")
+
+			if bucket == "s3:// " {
+				return
+			}
+
+			err = cfg.validate()
+			require.Error(t, err, "validate")
+			assert.ErrorIs(t, err, errMissingRequired)
+			assert.Contains(t, err.Error(), Bucket, "the error names the missing field")
+
+			st := Storage{Provider: ProviderS3, Config: map[string]string{
+				keyS3Bucket:    bucket,
+				keyS3AccessKey: creds.AccessKey,
+				keyS3SecretKey: creds.SecretKey,
+			}}
+
+			_, err = st.ToS3Config()
+			require.Error(t, err, "ToS3Config")
+			assert.ErrorIs(t, err, errMissingRequired)
+		})
+	}
+
+	// Positive control: the same credentials with a real bucket name pass
+	// every route, so the failures above are the bucket's alone.
+	ok := S3Config{Bucket: "bkt", AWS: creds}
+	assert.NoError(suite.T(), ok.validate())
+
+	st, err := NewStorage(ProviderS3, &ok)
+	require.NoError(suite.T(), err, clues.ToCore(err))
+
+	_, err = st.ToS3Config()
+	assert.NoError(suite.T(), err, clues.ToCore(err))
+}
