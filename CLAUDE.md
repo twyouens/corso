@@ -141,7 +141,7 @@ The test-tenant env file must define `AZURE_TENANT_ID`, `AZURE_CLIENT_ID` and `A
     built returns that default unchanged, and its PII handling is **plaintext**, so identifiers are
     logged in the clear. `TestSeed_SettingsApplyOnlyToTheFirstBuild` pins this.
 
-  k3ep seeds with `PIIHash` at start-up. Do not "fix" either property in the fork without a chunk that
+  k3ep must seed with `PIIHash` as the process's first logger use. Do not "fix" either property in the fork without a chunk that
   says so.
 - A repository connection's Microsoft 365 data provider is reused across every `Backup`/`Restore`/`Export` call made on it (see `pkg/repository`'s `connectToM365`), and its resource lookup handler (Users/Groups/Sites) is tied to whichever `path.ServiceType` was passed the *last* time `ConnectDataProvider` ran - including `path.UnknownService`, which `pkg/engine` passes while opening a repository before any service has been chosen. A new call site that reuses an existing `*m365.Controller` for a different service must call `Controller.EnsureResourceHandler` with that service first, or risk a nil-handler panic the fork's own tests never catch (the CLI always opens a repository already committed to one service).
 

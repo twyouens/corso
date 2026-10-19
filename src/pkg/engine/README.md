@@ -717,13 +717,15 @@ Two related defaults, inherited from the fork rather than added by
 
 - **`logger.Seed` must be the process's first use of the logger, and must
   happen before any concurrent work.** Both are rules, not advice:
-  - *First use.* `Seed`'s settings, `PIIHandling` included, apply only when
-    `Seed` builds the process logger. If anything has already built the lazy
-    default - any fork call made on a context with no logger in it - `Seed`
-    returns that existing logger unchanged, and its **plaintext** PII handling
-    stays: identifiers are logged in the clear even though you asked for
-    `PIIHash`. (`pkg/logger`'s `TestSeed_SettingsApplyOnlyToTheFirstBuild` pins
-    this.)
+  - *First use.* `Seed` builds the process logger only once, and the
+    settings that shape it - `File`, `Format`, `Level` and `PIIHandling` -
+    apply only to that build. (`LogStorage` is the exception: every `Seed`
+    call applies it to the context it returns.) If anything has already built
+    the lazy default - any fork call made on a context with no logger in it -
+    `Seed` returns that existing logger unchanged, and its **plaintext** PII
+    handling stays: identifiers are logged in the clear even though you asked
+    for `PIIHash`. (`pkg/logger`'s `TestSeed_SettingsApplyOnlyToTheFirstBuild`
+    pins this.)
   - *Before concurrency.* Building the logger sets the `clues` library's
     process-wide hasher. That is a plain package variable in an external
     module, so the one write cannot be synchronised with `clues.Hide` calls
@@ -733,8 +735,8 @@ Two related defaults, inherited from the fork rather than added by
     shared state safe for concurrent use; this one write is the exception, and
     the user's decision is to close it by this rule rather than by changing
     the logger's behaviour.
-  - k3ep seeds the engine's logger with `PIIHash` at process start-up, before
-    any engine call and before any worker goroutine starts.
+  - k3ep must seed the engine's logger with `PIIHash` as the process's first
+    logger use, before any engine call and before any worker goroutine starts.
 
 ### 4.9 k3ep must derive storage location and credentials server-side
 
