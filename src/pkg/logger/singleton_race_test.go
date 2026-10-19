@@ -90,3 +90,66 @@ func TestSingleton_ConcurrentFirstUse(t *testing.T) {
 		assert.Same(t, got[0], got[i], "caller %d got the same process logger as caller 0", i)
 	}
 }
+
+// TestResolvedLogFile_ConcurrentAccess drives every in-package reader and
+// writer of ResolvedLogFile at once, after the process logger is built:
+// logger.Ctx on a context with no logger (defaultSingleton), logger.Set,
+// Settings.EnsureDefaults, GetLogFile and PreloadLoggingFlags. Each of
+// those resolves the default log file, reading ResolvedLogFile and, for
+// all but GetLogFile, writing it.
+//
+// Its point is the -race run. 0.12's first fix locked only the
+// defaultSingleton path, so logger.Set - whose EnsureDefaults call wrote
+// ResolvedLogFile unlocked - still raced every logger.Ctx on a background
+// context (review measured 6 race reports from 8 of each). Every caller
+// here must take singletonMu for the variable.
+//
+// PreloadLoggingFlags runs on one goroutine only: it also binds the
+// package's flag-value globals (LogLevelFV and the rest) through addFlags,
+// which are CLI start-up state written by cobra too, and are deliberately
+// not guarded. Two concurrent calls race on those, not on ResolvedLogFile.
+func TestResolvedLogFile_ConcurrentAccess(t *testing.T) {
+	resetSingleton(t)
+
+	//nolint:forbidigo
+	bg := context.Background()
+
+	// Build the process logger first, so the concurrent phase below
+	// exercises ResolvedLogFile's accessors and not the first build
+	// (TestSingleton_ConcurrentFirstUse covers that).
+	_ = zslFromCtx(bg)
+
+	const perKind = 8
+
+	var (
+		wg    sync.WaitGroup
+		start = make(chan struct{})
+		run   = func(fn func()) {
+			wg.Add(1)
+
+			go func() {
+				defer wg.Done()
+
+				<-start
+				fn()
+			}()
+		}
+	)
+
+	for i := 0; i < perKind; i++ {
+		run(func() { _ = Ctx(bg) })
+		run(func() { _ = Set(bg, zap.NewNop().Sugar()) })
+		run(func() { _ = Settings{}.EnsureDefaults() })
+		run(func() { _ = GetLogFile("") })
+	}
+
+	// ResolvedLogFile is pinned to stderr by resetSingleton, and
+	// GetLogFile returns it ahead of the flag value, so this creates no
+	// file.
+	run(func() { _ = PreloadLoggingFlags([]string{"--log-file", "-"}) })
+
+	close(start)
+	wg.Wait()
+
+	assert.Equal(t, Stderr, GetLogFile(""), "every caller resolved the same log file")
+}

@@ -23,12 +23,27 @@ import (
 // Default location for writing logs, initialized in platform specific files
 var userLogsDir string
 
-// singletonMu guards the lazily built process logger: logCore and
-// loggerton, and the process-wide state written while building it - clues'
-// hasher (setCluesSecretsHash) and, for the default settings,
-// ResolvedLogFile (EnsureDefaults). Callers on several goroutines can reach
-// the lazy build at once, for example graph's LoggingMiddleware handling
-// concurrent requests whose context carries no logger.
+// singletonMu guards the package's process-wide logging state that is read
+// or written after start-up:
+//   - the lazily built process logger, logCore and loggerton, and clues'
+//     hasher, set once while building it (setCluesSecretsHash);
+//   - ResolvedLogFile, which every default-settings resolution reads and
+//     writes: EnsureDefaults, GetLogFile and PreloadLoggingFlags, and so
+//     logger.Ctx on a context with no logger, logger.Set and the lazy build.
+//
+// Callers on several goroutines reach these at once, for example graph's
+// LoggingMiddleware handling concurrent requests whose context carries no
+// logger. Inside the package, code already holding the lock uses the
+// *Locked variants; sync.Mutex is not re-entrant.
+//
+// Not guarded, by design: the flag-value globals (LogLevelFV and the rest),
+// which addFlags binds and cobra writes during CLI start-up, and any direct
+// access to the exported ResolvedLogFile from outside this package, which
+// should happen only before concurrent work starts. One race is outside
+// this package's reach: clues.SetHasher writes a plain package variable in
+// the clues module, so a goroutine that calls clues.Hide without having used
+// the logger can race the lazy build's one hasher write. Seed a logger
+// before going concurrent (see pkg/engine's README).
 var (
 	singletonMu sync.Mutex
 	logCore     *zapcore.Core
@@ -83,7 +98,10 @@ var (
 	MaskSensitiveDataFV bool
 	logStorageFV        bool
 
-	ResolvedLogFile string // logFileFV after processing
+	// ResolvedLogFile is logFileFV after processing. Guarded by singletonMu
+	// inside this package; read it directly only before concurrent work
+	// starts (the CLI prints it once, after seeding), or use GetLogFile("").
+	ResolvedLogFile string
 	piiHandling     string // piiHandling after MaskSensitiveDataFV processing
 )
 
@@ -202,8 +220,10 @@ func PreloadLoggingFlags(args []string) Settings {
 		return set
 	}
 
-	set.File = GetLogFile(lffv)
+	singletonMu.Lock()
+	set.File = getLogFileLocked(lffv)
 	ResolvedLogFile = set.File
+	singletonMu.Unlock()
 
 	// retrieve the user's preferred PII handling algorithm
 	// defaults to "plaintext"
@@ -233,7 +253,17 @@ func PreloadLoggingFlags(args []string) Settings {
 
 // GetLogFile parses the log file.  Uses the provided value, if populated,
 // then falls back to the env var, and then defaults to stderr.
+//
+// Safe for concurrent use: it reads ResolvedLogFile under singletonMu.
 func GetLogFile(logFileFlagVal string) string {
+	singletonMu.Lock()
+	defer singletonMu.Unlock()
+
+	return getLogFileLocked(logFileFlagVal)
+}
+
+// getLogFileLocked is GetLogFile for a caller that holds singletonMu.
+func getLogFileLocked(logFileFlagVal string) string {
 	if len(ResolvedLogFile) > 0 {
 		return ResolvedLogFile
 	}
@@ -277,7 +307,19 @@ type Settings struct {
 
 // EnsureDefaults sets any non-populated settings to their default value.
 // exported for testing without circular dependencies.
+//
+// Safe for concurrent use: it resolves the default log file, and records it
+// in ResolvedLogFile, under singletonMu.
 func (s Settings) EnsureDefaults() Settings {
+	singletonMu.Lock()
+	defer singletonMu.Unlock()
+
+	return s.ensureDefaultsLocked()
+}
+
+// ensureDefaultsLocked is EnsureDefaults for a caller that holds
+// singletonMu.
+func (s Settings) ensureDefaultsLocked() Settings {
 	set := s
 
 	levels := []logLevel{LLDisabled, LLDebug, LLInfo, LLWarn, LLError}
@@ -296,7 +338,7 @@ func (s Settings) EnsureDefaults() Settings {
 	}
 
 	if len(set.File) == 0 {
-		set.File = GetLogFile("")
+		set.File = getLogFileLocked("")
 		ResolvedLogFile = set.File
 	}
 
@@ -395,14 +437,13 @@ func singleton(set Settings) *zap.SugaredLogger {
 }
 
 // defaultSingleton is singleton(Settings{}.EnsureDefaults()), with the
-// defaults resolved under singletonMu too: EnsureDefaults writes
-// ResolvedLogFile, and every logger lookup on a context without a logger
-// comes through here.
+// defaults resolved in the same critical section: every logger lookup on a
+// context without a logger comes through here.
 func defaultSingleton() *zap.SugaredLogger {
 	singletonMu.Lock()
 	defer singletonMu.Unlock()
 
-	return singletonLocked(Settings{}.EnsureDefaults())
+	return singletonLocked(Settings{}.ensureDefaultsLocked())
 }
 
 // singletonLocked returns the process logger, building it on first use.
@@ -419,7 +460,7 @@ func singletonLocked(set Settings) *zap.SugaredLogger {
 		return loggerton
 	}
 
-	set = set.EnsureDefaults()
+	set = set.ensureDefaultsLocked()
 	setCluesSecretsHash(set.PIIHandling)
 
 	logCore, loggerton = genLogger(set)
