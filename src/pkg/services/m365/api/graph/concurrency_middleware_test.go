@@ -168,8 +168,9 @@ func (suite *ConcurrencyMWUnitTestSuite) TestTimedFence_Block() {
 		tf.RaiseFence(time.Duration(i) * time.Second)
 	}
 
-	// -5..0 get dropped, 1..5 get added
-	assert.Len(t, tf.timers, 5)
+	// -5..0 get dropped, 1..5 get added.  Read through timerCount, under
+	// the fence's lock: the timer goroutines delete from this map.
+	assert.Equal(t, 5, tf.timerCount())
 
 	start := time.Now()
 
