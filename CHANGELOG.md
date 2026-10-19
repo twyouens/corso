@@ -21,7 +21,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   require `AWS_SESSION_TOKEN`.** `tester.MustGetEnvVars`/`MustGetEnvSets` asserted
   that each variable's *name* was non-empty, which is always true, so a suite
   gated on a missing credential ran anyway; they now check the value and fail
-  naming the variable, never echoing a value. `storeTD.AWSStorageCredEnvs` drops
+  naming the variable, never echoing a value. As a result,
+  `make test-integration` with a test-tenant variable unset now fails at the suite
+  gate ("AZURE_TENANT_ID env var required for test suite"), naming the first
+  missing variable, before `internal/seed`'s own check can list them all.
+  `storeTD.AWSStorageCredEnvs` drops
   the session token, which only temporary credentials have and which would
   otherwise have become mandatory for static keys and MinIO. Both helpers take
   `require.TestingT` rather than `*testing.T`, which every existing caller
@@ -111,10 +115,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `pkg/logger`: the lazily built process logger was read and written - along with
     `ResolvedLogFile` and `clues`' process-wide hasher - with no synchronisation, so
     concurrent first uses on contexts with no logger raced and could each build and
-    return a *different* logger. Now built under one lock, through both lazy entry
-    points. **Not closed:** that first build still sets `clues`' hasher, a plain
-    package variable in the external `clues` module, so a goroutine calling
-    `clues.Hide` without ever having used the logger can race that single write.
+    return a *different* logger. One mutex now guards the logger and
+    `ResolvedLogFile` on every path: `logger.Ctx`, `Set`, `Seed`/`CtxOrSeed`,
+    `EnsureDefaults`, `GetLogFile` and `PreloadLoggingFlags`. (Review found the first
+    version left `Set` writing `ResolvedLogFile` unlocked.) The first build's one write
+    of `clues`' hasher - a plain package variable in the external `clues` module -
+    cannot be synchronised from here. It is closed by a documented rule instead, per
+    the user's decision: seed a logger as the process's first logger use, before any
+    concurrent work. See `pkg/engine/README.md` §4.8, which also records that a `Seed`
+    coming after the lazy default keeps that default's plaintext PII handling.
   - Test fixtures: the groups conversation getter's call log and the exchange
     `ItemGetSerialize` mock's counters, both written from one goroutine per item.
 - **Test harness: `pkg/storage/testdata.NewPrefixedS3Storage` builds a storage

@@ -115,9 +115,10 @@ The test-tenant env file must define `AZURE_TENANT_ID`, `AZURE_CLIENT_ID` and `A
 - **A test that exists to catch a data race only fails under `-race`, and CI does not run `-race`.**
   Chunk 0.12's race tests (`graph`'s `TestTimedFence_BlockWhileFenceDrops`, `kopia`'s
   `TestCorsoProgress_ConcurrentCallbacks`, `fault`'s `TestBus_FailureReadDuringConcurrentAdds`,
-  `logger`'s `TestSingleton_ConcurrentFirstUse`, and the groups/exchange collection suites) each go red
+  `logger`'s `TestSingleton_ConcurrentFirstUse` and `TestResolvedLogFile_ConcurrentAccess`, and the
+  groups/exchange collection suites) each go red
   under `go test -race` when their fix is reverted, and stay green under a plain `go test` - except the
-  logger one, which usually fails without `-race` as well. Run `GO111MODULE=on GOWORK=off go test -race`
+  first logger one, which usually fails without `-race` as well. Run `GO111MODULE=on GOWORK=off go test -race`
   on every package a chunk touches that has concurrency. As of 0.12, `pkg/services/m365/api/graph`,
   `internal/kopia`, `internal/m365/collection/groups`, `internal/m365/collection/exchange`, `pkg/logger`
   and `pkg/fault` pass `-race` with no exclusions; keep them that way. When a race mutation stays green,
@@ -125,11 +126,23 @@ The test-tenant env file must define `AZURE_TENANT_ID`, `AZURE_CLIENT_ID` and `A
   stayed green: two because other synchronisation (a lock, a channel close) already ordered the accesses,
   and one because the first version of the logger test reached only one of the logger's two lazy entry
   points.
-  `fault.Bus.Failure()` is safe to poll while workers add errors to the same bus, and `pkg/logger`'s
-  lazy process logger is built under a lock. One race remains there: the first lazy logger build sets
-  `clues`' process-wide hasher (`clues.SetHasher` is an unsynchronised package variable in that external
-  module), so a goroutine calling `clues.Hide`/`Conceal` without having used the logger can race that one
-  write. Closing it needs either a behaviour change or a `clues` change; it is recorded as an open decision.
+  `fault.Bus.Failure()` is safe to poll while workers add errors to the same bus. In `pkg/logger`, one
+  mutex (`singletonMu`) guards the lazy process logger and `ResolvedLogFile` on every path
+  (`logger.Ctx`, `Set`, `Seed`/`CtxOrSeed`, `EnsureDefaults`, `GetLogFile`, `PreloadLoggingFlags`).
+  Code that already holds it must call the unexported `*Locked` variants, because `sync.Mutex` is not
+  re-entrant. Two things stay unsynchronised by design: the flag-value globals (`LogLevelFV` and the
+  rest), which cobra writes during CLI start-up, and the first logger build's one write of `clues`'
+  process-wide hasher (`clues.SetHasher` is a plain package variable in that external module).
+- **A caller must seed a logger before going concurrent, and `logger.Seed` must be its first logger
+  use.** This is the user's decision for closing that hasher race: a documented rule, not a behaviour
+  change. Two reasons, both in `src/pkg/engine/README.md` §4.8:
+  - Seeding first orders the hasher write ahead of every `clues.Hide` on other goroutines.
+  - `Seed`'s settings apply only to the first build. A `Seed` that comes after the lazy default has been
+    built returns that default unchanged, and its PII handling is **plaintext**, so identifiers are
+    logged in the clear. `TestSeed_SettingsApplyOnlyToTheFirstBuild` pins this.
+
+  k3ep seeds with `PIIHash` at start-up. Do not "fix" either property in the fork without a chunk that
+  says so.
 - A repository connection's Microsoft 365 data provider is reused across every `Backup`/`Restore`/`Export` call made on it (see `pkg/repository`'s `connectToM365`), and its resource lookup handler (Users/Groups/Sites) is tied to whichever `path.ServiceType` was passed the *last* time `ConnectDataProvider` ran - including `path.UnknownService`, which `pkg/engine` passes while opening a repository before any service has been chosen. A new call site that reuses an existing `*m365.Controller` for a different service must call `Controller.EnsureResourceHandler` with that service first, or risk a nil-handler panic the fork's own tests never catch (the CLI always opens a repository already committed to one service).
 
 ## Do not
