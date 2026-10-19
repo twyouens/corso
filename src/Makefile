@@ -17,10 +17,17 @@ lint: check-lint-version
 
 # check runs everything CI runs: build, lint and unit tests. Works with
 # GOWORK=off so it matches exactly what a pull request's CI job verifies.
+#
+# GO111MODULE=on is set here, on every line, rather than left to the
+# caller: a machine whose global Go config sets GO111MODULE=off (`go env -w`)
+# otherwise builds in GOPATH mode and fails to resolve every import, and make
+# only passes a variable into a recipe's environment if the caller exported
+# it. The sub-make for lint inherits both variables, so golangci-lint and
+# staticcheck run in module mode too.
 check:
-	GOWORK=off go build ./...
-	GOWORK=off $(MAKE) lint
-	GOWORK=off go test ./...
+	GO111MODULE=on GOWORK=off go build ./...
+	GO111MODULE=on GOWORK=off $(MAKE) lint
+	GO111MODULE=on GOWORK=off go test ./...
 
 # test-integration runs the test-tenant harness's one integration test
 # (src/internal/seed) against the real Microsoft 365 test tenant. It is
@@ -28,18 +35,17 @@ check:
 # Graph calls. Run it through the workspace's credential loader, from the
 # workspace root:
 #
-#   scripts/with-test-tenant.sh env GO111MODULE=on make -C worktrees/corso-<id>/src test-integration
+#   scripts/with-test-tenant.sh make -C worktrees/corso-<id>/src test-integration
 #
-# The `env GO111MODULE=on` is required and easy to lose: this target sets
-# GOWORK=off but not GO111MODULE, and make does not inherit the shell's
-# value into a recipe, so without it the suite fails with "[setup failed]"
-# in GOPATH mode on a machine whose global Go config sets GO111MODULE=off.
+# It sets GO111MODULE=on itself, for the reason given on `check` above;
+# before chunk 0.12 it did not, and a run without `env GO111MODULE=on` in
+# front failed with "[setup failed]" in GOPATH mode.
 #
 # CORSO_NIGHTLY_TESTS enables the gated suite the same way
-# .github/workflows/nightly-test-tenant.yml does; credential validation
+# .github/workflows/test-tenant.yml does; credential validation
 # happens inside the suite itself and reports any missing variable by name.
 test-integration:
-	CORSO_NIGHTLY_TESTS=true GOWORK=off go test -tags testing -v -count=1 -timeout 30m ./internal/seed/...
+	CORSO_NIGHTLY_TESTS=true GO111MODULE=on GOWORK=off go test -tags testing -v -count=1 -timeout 30m ./internal/seed/...
 
 fmt:
 	gofumpt -w .

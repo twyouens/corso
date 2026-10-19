@@ -9,6 +9,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **`pkg/storage` rejects a whitespace-only S3 bucket name** (`" "`, `"\t"`), the
+  same rule `S3Config.validate()` already applied to the access and secret keys; it
+  previously rejected only the empty string, so a blank-looking bucket validated
+  and failed later against the endpoint. Only the check trims - the stored name and
+  `GetStorageConfigHash()` are unchanged (`TestGetStorageConfigHash_PinnedValues`
+  still passes). Through `NewStorage`, which strips `s3://` first, `"s3:// "` is
+  rejected too; a raw `"s3://"` in a hand-built config map is still not, as before.
+- **Test harness: the gated S3 integration suites now require
+  `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` to have values, and no longer
+  require `AWS_SESSION_TOKEN`.** `tester.MustGetEnvVars`/`MustGetEnvSets` asserted
+  that each variable's *name* was non-empty, which is always true, so a suite
+  gated on a missing credential ran anyway; they now check the value and fail
+  naming the variable, never echoing a value. As a result,
+  `make test-integration` with a test-tenant variable unset now fails at the suite
+  gate ("AZURE_TENANT_ID env var required for test suite"), naming the first
+  missing variable, before `internal/seed`'s own check can list them all.
+  `storeTD.AWSStorageCredEnvs` drops
+  the session token, which only temporary credentials have and which would
+  otherwise have become mandatory for static keys and MinIO. Both helpers take
+  `require.TestingT` rather than `*testing.T`, which every existing caller
+  satisfies.
 - **The Microsoft Graph concurrency limiter is now per client, not per process.**
   Its capacity is a property of each Graph client, derived from the
   `control.Options.Parallelism.ItemFetch` that client's caller passed, and it is
@@ -75,6 +96,48 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Data races, each proven by a test that goes red under `go test -race` when
+  its fix is reverted** (chunk 0.12). `pkg/services/m365/api/graph`,
+  `internal/kopia`, `internal/m365/collection/groups`,
+  `internal/m365/collection/exchange`, `pkg/logger` and `pkg/fault` now pass
+  `-race` with no exclusions.
+  - `graph`'s throttling fence: `timedFence.Block` read the fence channel without
+    the lock its timer goroutines write it under - reachable whenever a `429` with
+    `Retry-After` raised the fence while other requests were in flight.
+  - `internal/kopia`: `corsoProgress.FinishedFile` re-read the file and byte
+    counters with plain loads for its every-1000-files log line while Kopia's
+    upload goroutines updated them atomically; this fired on any `-race` backup.
+  - `pkg/fault`: `Bus.Failure()` read the failure without the bus's lock.
+    Collections poll it to stop spawning workers while the workers already
+    spawned add errors to the same fail-fast bus. Not in the brief's list, but the
+    exchange collection suite failed `-race` in about 6 of 10 runs on it once its
+    fixture races were fixed.
+  - `pkg/logger`: the lazily built process logger was read and written - along with
+    `ResolvedLogFile` and `clues`' process-wide hasher - with no synchronisation, so
+    concurrent first uses on contexts with no logger raced and could each build and
+    return a *different* logger. One mutex now guards the logger and
+    `ResolvedLogFile` on every path: `logger.Ctx`, `Set`, `Seed`/`CtxOrSeed`,
+    `EnsureDefaults`, `GetLogFile` and `PreloadLoggingFlags`. (Review found the first
+    version left `Set` writing `ResolvedLogFile` unlocked.) The first build's one write
+    of `clues`' hasher - a plain package variable in the external `clues` module -
+    cannot be synchronised from here. It is closed by a documented rule instead, per
+    the user's decision: seed a logger as the process's first logger use, before any
+    concurrent work. See `pkg/engine/README.md` §4.8, which also records that a `Seed`
+    coming after the lazy default keeps that default's plaintext PII handling.
+  - Test fixtures: the groups conversation getter's call log and the exchange
+    `ItemGetSerialize` mock's counters, both written from one goroutine per item.
+- **Test harness: `pkg/storage/testdata.NewPrefixedS3Storage` builds a storage
+  again.** It had supplied no credentials since 0.6 made them mandatory, so every
+  gated integration suite using it failed at construction. It now reads them from
+  `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY`/`AWS_SESSION_TOKEN` in the
+  environment (the same variables the suites gate on), and takes the test
+  config's `endpoint` and a new `donotusetls` key, so the suites can run against
+  any S3-compatible store. `TestStreamStoreIntgSuite`,
+  `TestPersistentConfigOpIntegrationSuite` and `internal/kopia`'s
+  `TestWrapperIntegrationSuite` were run against a local MinIO.
+- **`make check` and `make test-integration` set `GO111MODULE=on` themselves**, so
+  neither fails in GOPATH mode on a machine whose global Go config sets
+  `GO111MODULE=off`.
 - `pkg/storage`'s `TestS3Config_Validate_RequiresCredentials_NoOptOut` was flaky,
   failing **8 of 48 runs** (~17%) across **six** of its subtests. Its "no
   surface reports a credential's length" assertion searched a rendered `clues`

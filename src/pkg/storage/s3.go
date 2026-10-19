@@ -162,12 +162,15 @@ func (c *S3Config) StringConfig() (map[string]string, error) {
 // valid AWS credentials either, and would otherwise pass this check only
 // to fail later, after several signed-but-rejected round trips against
 // the caller-named endpoint, with a confusing "bucket does not exist"
-// rather than a clear error here.
+// rather than a clear error here. The bucket gets the same treatment
+// (since 0.12): a whitespace-only name is missing, not a bucket. The
+// value itself is not trimmed - only the check is - so no stored name
+// and no config hash changes.
 //
 // Each error names the configuration field that is missing and never
 // echoes its value, not even a prefix or a length.
 func (c S3Config) validate() error {
-	if len(c.Bucket) == 0 {
+	if len(strings.TrimSpace(c.Bucket)) == 0 {
 		return clues.Stack(errMissingRequired, clues.New(Bucket))
 	}
 

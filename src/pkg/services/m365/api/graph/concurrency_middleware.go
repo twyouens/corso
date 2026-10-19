@@ -282,12 +282,16 @@ func newTimedFence() *timedFence {
 // if no fence is up, return immediately.
 // returns if the ctx deadlines before the fence is let down.
 func (tf *timedFence) Block(ctx context.Context) error {
-	// set to a local var to avoid race panics from tf.c
-	// getting set to nil between the conditional check and
-	// the read case.  If c gets closed between those two
-	// points then the select case will exit immediately,
-	// as if we didn't block at all.
+	// Read tf.c under tf.mu: RaiseFence and its timer goroutines write it
+	// under the same lock, and an unlocked read here is a data race.
+	// Copy it to a local so the select below never sees tf.c change from
+	// non-nil to nil between the check and the receive.  If c gets closed
+	// after the copy, the receive returns immediately, as if we didn't
+	// block at all.  The lock is released before waiting, so a blocked
+	// caller never holds up RaiseFence or the timer that drops the fence.
+	tf.mu.Lock()
 	c := tf.c
+	tf.mu.Unlock()
 
 	if c != nil {
 		select {

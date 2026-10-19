@@ -99,11 +99,18 @@ func (cp *corsoProgress) FinishedFile(relativePath string, err error) {
 		return
 	}
 
-	atomic.AddInt64(&cp.totalFiles, 1)
+	// Kopia calls this from several goroutines at once, and
+	// FinishedHashingFile updates totalBytes concurrently, so both counters
+	// are only ever read atomically: use the value AddInt64 returns rather
+	// than re-reading the field.
+	totalFiles := atomic.AddInt64(&cp.totalFiles, 1)
 
 	// Log every 1000 items uploaded
-	if cp.totalFiles%1000 == 0 {
-		logger.Ctx(cp.ctx).Infow("finishedfile", "totalFiles", cp.totalFiles, "totalBytes", cp.totalBytes)
+	if totalFiles%1000 == 0 {
+		logger.Ctx(cp.ctx).Infow(
+			"finishedfile",
+			"totalFiles", totalFiles,
+			"totalBytes", atomic.LoadInt64(&cp.totalBytes))
 	}
 
 	d := cp.get(relativePath)

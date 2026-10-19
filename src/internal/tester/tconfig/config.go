@@ -18,6 +18,7 @@ const (
 	// S3 config
 	TestCfgBucket          = "bucket"
 	TestCfgEndpoint        = "endpoint"
+	TestCfgDoNotUseTLS     = "donotusetls"
 	TestCfgPrefix          = "prefix"
 	TestCfgStorageProvider = "provider"
 	TestCfgFilesystemPath  = "path"
@@ -125,6 +126,7 @@ func ReadTestConfig() (map[string]string, error) {
 	fallbackTo(testEnv, TestCfgAccountProvider, vpr.GetString(TestCfgAccountProvider))
 	fallbackTo(testEnv, TestCfgBucket, os.Getenv("S3_BUCKET"), vpr.GetString(TestCfgBucket))
 	fallbackTo(testEnv, TestCfgEndpoint, vpr.GetString(TestCfgEndpoint), "s3.amazonaws.com")
+	fallbackTo(testEnv, TestCfgDoNotUseTLS, vpr.GetString(TestCfgDoNotUseTLS))
 	fallbackTo(testEnv, TestCfgPrefix, vpr.GetString(TestCfgPrefix))
 	fallbackTo(testEnv, TestCfgAzureTenantID, os.Getenv(account.AzureTenantID), vpr.GetString(TestCfgAzureTenantID))
 	fallbackTo(

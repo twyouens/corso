@@ -6,6 +6,7 @@ import (
 	"io"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -456,7 +457,11 @@ func (suite *CollectionUnitSuite) TestPrefetchCollection_Conversations() {
 type getAndAugmentConversation struct {
 	GetItemErr error
 	GetMetaErr error
-	CallIDs    []string
+
+	// mu guards CallIDs: streamItems calls getItem from one goroutine per
+	// item, so appending without it is a data race under -race.
+	mu      sync.Mutex
+	CallIDs []string
 }
 
 //lint:ignore U1000 false linter issue due to generics
@@ -466,7 +471,9 @@ func (m *getAndAugmentConversation) getItem(
 	_ path.Elements,
 	postID string,
 ) (models.Postable, *details.GroupsInfo, error) {
+	m.mu.Lock()
 	m.CallIDs = append(m.CallIDs, postID)
+	m.mu.Unlock()
 
 	p := models.NewPost()
 	p.SetId(ptr.To(postID))
@@ -494,6 +501,9 @@ func (m *getAndAugmentConversation) supportsItemMetadata() bool {
 }
 
 func (m *getAndAugmentConversation) check(t *testing.T, expected []string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
 	// Sort before comparing. We could use a set, but that would prevent us from
 	// detecting duplicates.
 	slices.Sort(m.CallIDs)

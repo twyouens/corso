@@ -715,6 +715,29 @@ Two related defaults, inherited from the fork rather than added by
   })
   ```
 
+- **`logger.Seed` must be the process's first use of the logger, and must
+  happen before any concurrent work.** Both are rules, not advice:
+  - *First use.* `Seed` builds the process logger only once, and the
+    settings that shape it - `File`, `Format`, `Level` and `PIIHandling` -
+    apply only to that build. (`LogStorage` is the exception: every `Seed`
+    call applies it to the context it returns.) If anything has already built
+    the lazy default - any fork call made on a context with no logger in it -
+    `Seed` returns that existing logger unchanged, and its **plaintext** PII
+    handling stays: identifiers are logged in the clear even though you asked
+    for `PIIHash`. (`pkg/logger`'s `TestSeed_SettingsApplyOnlyToTheFirstBuild`
+    pins this.)
+  - *Before concurrency.* Building the logger sets the `clues` library's
+    process-wide hasher. That is a plain package variable in an external
+    module, so the one write cannot be synchronised with `clues.Hide` calls
+    already running on other goroutines (the fork's upload and Graph
+    goroutines make them). Seeding before starting any goroutine orders the
+    write ahead of every reader. Chunk 0.12 made the rest of `pkg/logger`'s
+    shared state safe for concurrent use; this one write is the exception, and
+    the user's decision is to close it by this rule rather than by changing
+    the logger's behaviour.
+  - k3ep must seed the engine's logger with `PIIHash` as the process's first
+    logger use, before any engine call and before any worker goroutine starts.
+
 ### 4.9 k3ep must derive storage location and credentials server-side
 
 The engine trusts `RepositoryConfig` completely. It cannot know whether a value
@@ -787,9 +810,12 @@ the filesystem (`pkg/logger/logger.go`):
   in the clear (§4.8).
 
 So the precise claim is: *the engine* reads nothing ambient, but *a process
-using it without configuring logging* does. Seed a logger before the first
-engine call (§4.8 has the call) and all four of those go away: the context
-carries your logger, your destination, your format and your PII handling.
+using it without configuring logging* does. Seed a logger as the process's
+first logger use, before the first engine call and before any concurrent work
+(§4.8 has the call and the reasons), and all four of those go away: the context
+carries your logger, your destination, your format and your PII handling. Seed
+it later and they do not - the lazy default has already been built and `Seed`
+returns it as it is.
 
 The rest of the obligation is the mirror image of the upside: there is no
 ambient state to misconfigure and nothing environment-dependent to reproduce,

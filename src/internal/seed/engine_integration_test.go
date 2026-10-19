@@ -72,10 +72,11 @@ func TestEngineIntegrationSuite(t *testing.T) {
 	})
 }
 
-// engineTestConfig re-validates every required credential's actual value
-// (not just its name - see internal/tester.MustGetEnvVars' known bug,
-// disclosed in 0.3 and 0.5's reports and still unfixed) before building a
-// Config, the same guard 0.5's GraphClientIntegrationSuite uses.
+// engineTestConfig re-validates every required credential's value before
+// building a Config, the same guard 0.5's GraphClientIntegrationSuite uses.
+// Since chunk 0.12 it is a backstop: NewIntegrationSuite's
+// tester.MustGetEnvSets checks the same variables' values (it used to check
+// only their names) and fails the suite first, naming the first one missing.
 func engineTestConfig(t *testing.T, manifestPath string) Config {
 	t.Helper()
 

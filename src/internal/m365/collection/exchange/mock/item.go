@@ -2,6 +2,7 @@ package mock
 
 import (
 	"context"
+	"sync"
 
 	"github.com/microsoft/kiota-abstractions-go/serialization"
 
@@ -15,12 +16,18 @@ import (
 // get and serialize item mock
 // ---------------------------------------------------------------------------
 
+// ItemGetSerialize is a mock item getter and serializer. Collections call
+// GetItem and Serialize from one goroutine per item, so both methods update
+// their counters under mu. Read GetCount and SerializeCount only once the
+// collection under test has finished streaming.
 type ItemGetSerialize struct {
 	GetData        serialization.Parsable
 	GetCount       int
 	GetErr         error
 	SerializeCount int
 	SerializeErr   error
+
+	mu sync.Mutex
 }
 
 func (m *ItemGetSerialize) GetItem(
@@ -28,7 +35,10 @@ func (m *ItemGetSerialize) GetItem(
 	string, string,
 	*fault.Bus,
 ) (serialization.Parsable, *details.ExchangeInfo, error) {
+	m.mu.Lock()
 	m.GetCount++
+	m.mu.Unlock()
+
 	return m.GetData, &details.ExchangeInfo{}, m.GetErr
 }
 
@@ -37,7 +47,9 @@ func (m *ItemGetSerialize) Serialize(
 	p serialization.Parsable,
 	_ string, _ string,
 ) ([]byte, error) {
+	m.mu.Lock()
 	m.SerializeCount++
+	m.mu.Unlock()
 
 	if p == nil || m.SerializeErr != nil {
 		return nil, m.SerializeErr
