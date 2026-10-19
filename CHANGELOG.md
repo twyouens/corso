@@ -41,8 +41,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   because `Client.Service()` and `api.NewService` already forward options;
   `newLargeItemService` was the only constructor that did not. `NoTimeout()` is
   still appended last and so always wins, so a caller cannot take the
-  no-timeout property away from the large-item client; pinned by
-  `TestPopulateConfig_LastOptionWins`. No non-test caller in this fork passes
+  no-timeout property away from the large-item client. That is pinned **at the
+  call site** by `api`'s `TestNewClient_LargeItemKeepsNoTimeoutOverACallerTimeout`,
+  which passes `graph.Timeout(time.Second)` to `api.NewClient` and reads the
+  timeout off `Client.LargeItem`'s actual `http.Client` through a new
+  `adapterWrap.HTTPClientTimeout()` accessor. (An earlier version of this entry
+  said it was pinned by `graph`'s `TestPopulateConfig_LastOptionWins`. It was
+  not: that test pins the option-ordering semantics the call site relies on,
+  but lives in `graph` and cannot see the order `newLargeItemService` builds its
+  slice in, and it stayed green when review moved `NoTimeout()` to the front.)
+  No non-test caller in this fork passes
   any `graph.Option` to `api.NewClient` today, so there is no behavioural
   change in tree.
 - `pkg/engine`'s `InitializeRepository` and `OpenRepository` no longer perform any
@@ -79,11 +87,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   attached to the error *is* a credential's length whatever its Go type, which
   catches `clues.With("secret_key_length", 38)` as an `int` - something no
   substring search on a rendered error can distinguish from an incidental 38.
-  The test therefore proves strictly more than before. Verified across 1000
-  in-process runs and 40 separate processes with no failure, and against five
-  deliberate leaks (length as `int`, length as `string`, length inside prose,
-  whole credential value, 8-character prefix), each of which reddens the
-  assertion named for its shape.
+  The test therefore proves strictly more than before; five deliberate leaks
+  (length as `int`, length as `string`, length inside prose, whole credential
+  value, 8-character prefix) each redden the assertion named for its shape.
+- **The same test's 4-character-prefix check was flaky for the same reason, and
+  an earlier version of this entry said otherwise.** That entry claimed the test
+  was "verified across 1000 in-process runs and 40 separate processes with no
+  failure"; the sample was too small to mean anything, and review reproduced the
+  failure. `accessValue` began `4cce`, which is all hex, so it collided with
+  traces such as `b9004cce` and `4ccef201`: **7 of 20** `-count=1000` runs failed
+  at `a2eccd69`. The fixture now begins `akid`, and the test now `require`s that
+  every needle it searches for - each value and its 4- and 8-character
+  prefixes - contains a non-hex character, so an all-hex fixture fails
+  deterministically with a message saying why rather than randomly one run in
+  a few hundred. Separately, the length check no longer reads `clues`'
+  `file.go:NN` stack-frame lines in the `%+v` rendering: a frame is a code
+  location and can never carry a credential, but a frame on line 38 is a
+  standalone `38`, and inserting one comment line near the top of
+  `pkg/storage/storage.go` (whose frame sits on line 37) failed eight subtests
+  on **every** run. Verified: **0 of 50** `-count=1000` runs (50,000 iterations)
+  and 0 of 40 separate processes fail, against the 7-of-20 baseline; the frame
+  can sit on any line from 37 to 67 without a failure; and every leak shape
+  above, plus a 4-character access-key prefix and a length written into the
+  error message itself, still reddens.
 
 ### Added
 

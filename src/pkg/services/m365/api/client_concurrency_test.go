@@ -2,6 +2,7 @@ package api
 
 import (
 	"testing"
+	"time"
 
 	"github.com/alcionai/clues"
 	"github.com/stretchr/testify/assert"
@@ -187,6 +188,70 @@ func (suite *ClientConcurrencyUnitSuite) TestNewClient_TwoClientsInOneProcessDoN
 
 	assert.Equal(t, 4, concurrencyLimitOf(t, wideFirst.Stable), "wide client, built first")
 	assert.Equal(t, 1, concurrencyLimitOf(t, narrowSecond.Stable), "narrow client, built second")
+}
+
+// httpClientTimeoutReporter is satisfied by the request adapters
+// graph.CreateAdapter builds, structurally, for the same reason as
+// concurrencyLimitReporter.
+type httpClientTimeoutReporter interface {
+	HTTPClientTimeout() time.Duration
+}
+
+func httpClientTimeoutOf(t *testing.T, svc graph.Servicer) time.Duration {
+	t.Helper()
+
+	reporter, ok := svc.Adapter().(httpClientTimeoutReporter)
+	require.True(t, ok, "graph adapter reports its http client's timeout")
+
+	return reporter.HTTPClientTimeout()
+}
+
+// TestNewClient_LargeItemKeepsNoTimeoutOverACallerTimeout guards the one risk
+// of newLargeItemService forwarding its caller's whole option slice: a
+// caller-supplied graph.Timeout must not reach the large-item client, whose
+// only reason to exist is that it has no timeout.  newLargeItemService
+// prevents that by appending graph.NoTimeout() *after* the caller's options.
+//
+// This is the call-site guard.  graph's TestPopulateConfig_LastOptionWins
+// pins the ordering semantics this depends on, but it lives in graph and
+// cannot see the order newLargeItemService builds its slice in - with
+// NoTimeout() moved to the front of that slice, it stays green while a
+// caller's one-second Timeout silently caps every large-item download.  This
+// test reads the timeout off LargeItem's actual http.Client, so that
+// regression reddens it.
+//
+// The expected no-timeout value is taken from a client built with
+// graph.NoTimeout() alone rather than hard-coded, and Stable is asserted to
+// honour the caller's Timeout, so the test proves both that caller options
+// reach this client and that the one which must not, does not.
+func (suite *ClientConcurrencyUnitSuite) TestNewClient_LargeItemKeepsNoTimeoutOverACallerTimeout() {
+	t := suite.T()
+
+	creds := fakeCreds(t)
+
+	reference, err := NewService(creds, count.New(), graph.NoTimeout())
+	require.NoError(t, err, clues.ToCore(err))
+
+	noTimeout := httpClientTimeoutOf(t, reference)
+	require.Greater(t, noTimeout, time.Hour, "graph.NoTimeout()'s timeout, as applied to a real client")
+
+	cli, err := NewClient(creds, control.DefaultOptions(), count.New(), graph.Timeout(time.Second))
+	require.NoError(t, err, clues.ToCore(err))
+
+	assert.Equal(t, time.Second, httpClientTimeoutOf(t, cli.Stable),
+		"Stable honours the caller's Timeout, so caller options do reach NewClient's services")
+	assert.Equal(t, noTimeout, httpClientTimeoutOf(t, cli.LargeItem),
+		"LargeItem keeps NoTimeout even when the caller passed a Timeout")
+
+	// And with no caller options at all, LargeItem is still the no-timeout
+	// client, so the assertion above is not satisfied by accident.
+	plain, err := NewClient(creds, control.DefaultOptions(), count.New())
+	require.NoError(t, err, clues.ToCore(err))
+
+	assert.Equal(t, noTimeout, httpClientTimeoutOf(t, plain.LargeItem),
+		"LargeItem with no caller options")
+	assert.Less(t, httpClientTimeoutOf(t, plain.Stable), noTimeout,
+		"Stable keeps its ordinary timeout with no caller options")
 }
 
 func fakeCreds(t *testing.T) account.M365Config {
