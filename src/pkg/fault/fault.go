@@ -292,7 +292,14 @@ func (e *Bus) Errors() *Errors {
 // indicates the operation exited prior to completion.
 // If the bus is a local instance, this only returns the
 // local failure, and will not return parent data.
+//
+// Safe to call while other goroutines add errors to the same bus: callers
+// routinely poll it to stop spawning work once a fail-fast bus has failed,
+// while the workers they already spawned are still reporting to it.
 func (e *Bus) Failure() error {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
 	return e.failure
 }
 
