@@ -6,6 +6,7 @@ import (
 	"maps"
 	"os"
 	"path/filepath"
+	"sync"
 	"time"
 
 	"github.com/alcionai/clues"
@@ -22,9 +23,16 @@ import (
 // Default location for writing logs, initialized in platform specific files
 var userLogsDir string
 
+// singletonMu guards the lazily built process logger: logCore and
+// loggerton, and the process-wide state written while building it - clues'
+// hasher (setCluesSecretsHash) and, for the default settings,
+// ResolvedLogFile (EnsureDefaults). Callers on several goroutines can reach
+// the lazy build at once, for example graph's LoggingMiddleware handling
+// concurrent requests whose context carries no logger.
 var (
-	logCore   *zapcore.Core
-	loggerton *zap.SugaredLogger
+	singletonMu sync.Mutex
+	logCore     *zapcore.Core
+	loggerton   *zap.SugaredLogger
 )
 
 type logLevel string
@@ -380,6 +388,26 @@ func setLevel(cfg zap.Config, level logLevel) zap.Config {
 }
 
 func singleton(set Settings) *zap.SugaredLogger {
+	singletonMu.Lock()
+	defer singletonMu.Unlock()
+
+	return singletonLocked(set)
+}
+
+// defaultSingleton is singleton(Settings{}.EnsureDefaults()), with the
+// defaults resolved under singletonMu too: EnsureDefaults writes
+// ResolvedLogFile, and every logger lookup on a context without a logger
+// comes through here.
+func defaultSingleton() *zap.SugaredLogger {
+	singletonMu.Lock()
+	defer singletonMu.Unlock()
+
+	return singletonLocked(Settings{}.EnsureDefaults())
+}
+
+// singletonLocked returns the process logger, building it on first use.
+// The caller must hold singletonMu.
+func singletonLocked(set Settings) *zap.SugaredLogger {
 	if loggerton != nil {
 		return loggerton
 	}
@@ -476,7 +504,7 @@ func SetWithSettings(
 func zslFromCtx(ctx context.Context) *zap.SugaredLogger {
 	l := ctx.Value(ctxKey)
 	if l == nil {
-		l = singleton(Settings{}.EnsureDefaults())
+		l = defaultSingleton()
 	}
 
 	return l.(*zap.SugaredLogger)
