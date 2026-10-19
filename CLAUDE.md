@@ -12,11 +12,12 @@ All Go commands run from `src/`.
 | Unit tests | `cd src && go test ./...` |
 | Lint | `cd src && golangci-lint run` (verify config in src/.golangci.yml) |
 | Everything CI runs | `cd src && make check` (added by chunk 0.2) |
-| Integration tests (test tenant) | `scripts/with-test-tenant.sh env GO111MODULE=on make -C worktrees/corso-<chunk-id>/src test-integration` from the workspace root. The `env GO111MODULE=on` is load-bearing on this machine and easy to lose: the `test-integration` target sets `GOWORK=off` but not `GO111MODULE`, and a bare `make` does not inherit the shell's value into the recipe, so without it the suite fails with `[setup failed]` in GOPATH mode (chunk 0.7 hit this). Scoped to `./internal/seed/...` only - the test-tenant harness's own smoke test (chunk 0.3), not the pre-existing backup/restore integration suites elsewhere in this repo, which target a different (Alcion) test tenant and belong to chunks 0.5-0.7. |
+| Integration tests (test tenant) | `scripts/with-test-tenant.sh make -C worktrees/corso-<chunk-id>/src test-integration` from the workspace root. The target sets `GO111MODULE=on` and `GOWORK=off` itself (since chunk 0.12; before that, a run without `env GO111MODULE=on` in front failed with `[setup failed]` in GOPATH mode). Scoped to `./internal/seed/...` only - the test-tenant harness's own smoke test (chunk 0.3), not the pre-existing backup/restore integration suites elsewhere in this repo, which target a different (Alcion) test tenant and belong to chunks 0.5-0.7. |
+| Gated S3 integration suites | `cd src && CORSO_CI_TESTS=true CORSO_TEST_CONFIG_FILE=<file> GO111MODULE=on GOWORK=off go test -count=1 -run <Suite> <pkgs>`, with credentials in the environment. The upstream `tester.NewIntegrationSuite` suites that store data in S3 (`internal/kopia`, `internal/streamstore`, `internal/operations`, `cli/...`) build their storage with `pkg/storage/testdata.NewPrefixedS3Storage`, which takes **credentials from `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` (plus `AWS_SESSION_TOKEN` if set)** and the repository passphrase from `CORSO_PASSPHRASE`, all from the environment, and **bucket, endpoint and TLS from the test config**: `S3_BUCKET` or the TOML file named by `CORSO_TEST_CONFIG_FILE` (`bucket = '...'`, `endpoint = 'host:port'`, `donotusetls = 'true'` for a plain-HTTP local MinIO). Never commit any of these values. The suites check the two AWS variables at their gate and fail naming the one that is empty (chunk 0.12 fixed `tester.MustGetEnvVars`, which checked names, not values). Most of these suites also need M365 credentials; `TestStreamStoreIntgSuite`, `TestPersistentConfigOpIntegrationSuite` and `internal/kopia`'s `TestWrapperIntegrationSuite` need only S3, and 0.12 ran them against a local MinIO. |
 | Seed the test tenant | `cd src && GO111MODULE=on GOWORK=off <workspace>/scripts/with-test-tenant.sh go run ./cmd/seed` (added by chunk 0.3; must run from `src/` - there is no `go.mod` at this repository's root) |
 | Build-check without the workspace | `cd src && GOWORK=off go build ./... && GOWORK=off go test ./...` |
 
-This machine's global Go configuration sets `GO111MODULE=off`; every command above needs `GO111MODULE=on` set explicitly alongside `GOWORK=off`, or module resolution silently falls back to GOPATH mode and every import fails to resolve. Several agents have lost time to this.
+This machine's global Go configuration sets `GO111MODULE=off`; every bare `go` command above needs `GO111MODULE=on` set explicitly alongside `GOWORK=off`, or module resolution silently falls back to GOPATH mode and every import fails to resolve. Several agents have lost time to this. The `Makefile`'s `check` and `test-integration` targets set both themselves (chunk 0.12), so a bare `make check` works.
 
 The test-tenant env file must define `AZURE_TENANT_ID`, `AZURE_CLIENT_ID` and `AZURE_CLIENT_SECRET`, plus `SEED_USER_ID` and `SEED_SITE_ID`: an existing, already-licensed M365 user and an existing SharePoint site that chunk 0.3's harness seeds dedicated, prefixed folders into. The harness creates neither; both must already exist in the test tenant.
 
@@ -111,6 +112,24 @@ The test-tenant env file must define `AZURE_TENANT_ID`, `AZURE_CLIENT_ID` and `A
   and every test stayed green, because that test pins `graph`'s option-ordering semantics and cannot
   see the order `api` builds its slice in. Before writing "pinned by X" in a comment or the
   changelog, make the regression and watch X go red.
+- **A test that exists to catch a data race only fails under `-race`, and CI does not run `-race`.**
+  Chunk 0.12's race tests (`graph`'s `TestTimedFence_BlockWhileFenceDrops`, `kopia`'s
+  `TestCorsoProgress_ConcurrentCallbacks`, `fault`'s `TestBus_FailureReadDuringConcurrentAdds`,
+  `logger`'s `TestSingleton_ConcurrentFirstUse`, and the groups/exchange collection suites) each go red
+  under `go test -race` when their fix is reverted, and stay green under a plain `go test` - except the
+  logger one, which usually fails without `-race` as well. Run `GO111MODULE=on GOWORK=off go test -race`
+  on every package a chunk touches that has concurrency. As of 0.12, `pkg/services/m365/api/graph`,
+  `internal/kopia`, `internal/m365/collection/groups`, `internal/m365/collection/exchange`, `pkg/logger`
+  and `pkg/fault` pass `-race` with no exclusions; keep them that way. When a race mutation stays green,
+  assume first that the test cannot reach the code, not that the fix is unnecessary. Three of 0.12's
+  stayed green: two because other synchronisation (a lock, a channel close) already ordered the accesses,
+  and one because the first version of the logger test reached only one of the logger's two lazy entry
+  points.
+  `fault.Bus.Failure()` is safe to poll while workers add errors to the same bus, and `pkg/logger`'s
+  lazy process logger is built under a lock. One race remains there: the first lazy logger build sets
+  `clues`' process-wide hasher (`clues.SetHasher` is an unsynchronised package variable in that external
+  module), so a goroutine calling `clues.Hide`/`Conceal` without having used the logger can race that one
+  write. Closing it needs either a behaviour change or a `clues` change; it is recorded as an open decision.
 - A repository connection's Microsoft 365 data provider is reused across every `Backup`/`Restore`/`Export` call made on it (see `pkg/repository`'s `connectToM365`), and its resource lookup handler (Users/Groups/Sites) is tied to whichever `path.ServiceType` was passed the *last* time `ConnectDataProvider` ran - including `path.UnknownService`, which `pkg/engine` passes while opening a repository before any service has been chosen. A new call site that reuses an existing `*m365.Controller` for a different service must call `Controller.EnsureResourceHandler` with that service first, or risk a nil-handler panic the fork's own tests never catch (the CLI always opens a repository already committed to one service).
 
 ## Do not
