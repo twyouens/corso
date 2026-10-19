@@ -30,10 +30,18 @@ func resetSingleton(t *testing.T) {
 }
 
 // TestSingleton_ConcurrentFirstUse makes the process logger's first use
-// happen on several goroutines at once, each with a context that carries
-// no logger - which is what graph's LoggingMiddleware does for concurrent
-// requests made on a background context, and what any library caller that
-// never seeds a logger does.
+// happen on several goroutines at once, through both of its entry points:
+//   - a lookup on a context that carries no logger (zslFromCtx, behind
+//     every logger.Ctx call), which resolves the default settings - what
+//     graph's LoggingMiddleware does for concurrent requests made on a
+//     background context, and what any library caller that never seeds a
+//     logger does;
+//   - CtxOrSeed with explicit settings (singleton), which is how
+//     tester.NewContext and the cmd/ programs seed one.
+//
+// Each path takes the lock on its own, so the test drives both: a test
+// using only the first leaves singleton's own lock unexercised (removing
+// it stayed green until the second path was added).
 //
 // Without synchronisation, every such caller can see loggerton == nil and
 // build its own logger, writing loggerton, logCore, ResolvedLogFile (via
@@ -62,8 +70,15 @@ func TestSingleton_ConcurrentFirstUse(t *testing.T) {
 			//nolint:forbidigo
 			ctx := context.Background()
 
-			got[i] = zslFromCtx(ctx)
-			_ = Ctx(ctx)
+			if i%2 == 0 {
+				got[i] = zslFromCtx(ctx)
+				_ = Ctx(ctx)
+
+				return
+			}
+
+			// Explicit stderr: never create a log file from a test.
+			_, got[i] = CtxOrSeed(ctx, Settings{File: Stderr, Format: LFText, Level: LLInfo})
 		}(i)
 	}
 

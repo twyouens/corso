@@ -136,16 +136,16 @@ func (or *overlapRecorder) server(t *testing.T, label string) *httptest.Server {
 // hammer fires requestCount concurrent GETs at url through client and waits
 // for all of them.
 //
-// Every request carries ctx, which must be a logger-seeded context (one from
-// tester.NewContext).  That is load-bearing under -race, and not about this
-// chunk: pkg/logger.singleton lazily writes package-level state - loggerton,
-// logCore and clues.SetHasher - with no synchronisation, so the first
-// logger.Ctx call on a context with no logger in it races against any
-// concurrent one.  graph's LoggingMiddleware calls logger.Ctx on the
-// request's context for every response, so concurrent requests on a
-// background context trip that pre-existing race.  Passing a seeded context
-// means the logger is read from the context and the lazy singleton is never
-// reached.
+// Every request carries ctx, a logger-seeded context (one from
+// tester.NewContext).  Chunk 0.10 needed that under -race: graph's
+// LoggingMiddleware calls logger.Ctx on the request's context for every
+// response, and a logger.Ctx call on a context with no logger in it used to
+// write pkg/logger's package-level state (ResolvedLogFile on every such call,
+// and the lazily built logger on the first) with no synchronisation.  Chunk
+// 0.12 put that behind a lock - with a background context here this suite
+// now passes -race, and fails on the code before 0.12 - so the seeded
+// context is no longer load-bearing.  It stays because it is the ordinary
+// test shape.
 func hammer(ctx context.Context, t *testing.T, client *http.Client, url string, requestCount int) {
 	t.Helper()
 
