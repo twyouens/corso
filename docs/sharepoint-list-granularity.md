@@ -15,13 +15,13 @@ means the number comes from the live run in [section 5](#5-live-evidence).
 
 | Question | Answer | Storage change needed? |
 | --- | --- | --- |
-| Row-level **restore** | **Yes, it can be derived.** The stored item holds every row, with its stable Graph ID and its field values, and the list's columns. The fork's existing restore path cannot write a subset into the original list today, but the gap is in the restore code, not in what was stored. | No |
-| Row-level **erasure** | **Yes, it can be derived.** A point can be rewritten so that its list object no longer contains one row: decode the object, drop the row, re-encode it, and swap the new object into the snapshot with Kopia's `DirRewriter`. That uses the same machinery 7.3 needs for whole-item erasure, plus one content-transform step. Measured: removing a row leaves every other row and every non-row key unchanged. | No |
+| Row-level **restore** | **Yes, it can be derived.** The stored item holds every row, with its Graph ID (matching live Graph at backup time; stability across a row edit is unverified, §5) and its field values, and the list's columns. The fork's existing restore path cannot write a subset into the original list today, but the gap is in the restore code, not in what was stored. | No |
+| Row-level **erasure** | **Yes, it can be derived.** A point can be rewritten so that its list object no longer contains one row: decode the object, drop the row, re-encode it, and swap the new object into the snapshot with Kopia's `DirRewriter`. That uses the same machinery 7.3 needs for whole-item erasure, plus one content-transform step. Measured on the seeded list (text, boolean and system fields only): removing a row leaves every other row and every non-row key unchanged. Round-trip safety for lookup, person, multi-choice, hyperlink, number and null values is unverified (§3.2, §5). | No |
 | Row-level **selection** (browse or search for a row, needed by both) | **Not possible from the details manifest today.** Browse reads only the details manifest, which records one entry per list with a row *count* and nothing else. Rows can be listed only by decrypting the list object, or by recording row summaries in the details at backup time. | No (details schema addition only) |
 
 **Recommendation** ([section 6](#6-recommendation-and-sizes)): do not change the storage format.
 Storing rows as items is the most expensive option (L–XL), and it is not needed for either
-capability. If row-level work is wanted, build it from the stored item instead: a small
+capability. If row-level work is wanted, build it from the stored item instead: a small-to-medium
 details-manifest addition, a medium restore path, and a small-to-medium transform added to 7.3. Whether
 that work belongs in v1 is the user's decision, together with the PRD amendment that is still pending.
 Four findings here matter to 5.1 and 7.3 even if lists stay list-granular. They are flagged with
@@ -224,8 +224,16 @@ Measured, in memory: removing row `"6"` from the stored seeded list (16,023 → 
 remaining row **deep-equal** to its original and every non-`items` top-level key **deep-equal**. The
 erased row's distinctive seeded `Title` was present before and is absent after. This is a bounded check
 on a long, prefixed, unique string, not a short-needle search. `ListToSPInfo` of the result reports
-`ItemCount` 1. The fork's serialiser round-trips the stored object with no semantic loss (1.6), so the
-transform cannot damage the other rows' data.
+`ItemCount` 1.
+
+That measurement covers only the column types the seeded `genericList` has: text, boolean and system
+fields. **Round-trip safety for lookup, person, multi-choice, hyperlink, number and null values is
+unverified.** The reasoning that it should hold is not a measurement: kiota writes `AdditionalData`
+values by type switch (`kiota-serialization-json-go/json_serialization_writer.go:804-807` onward), and
+the stored object is decoded and re-encoded by the same library. Whether every value shape Graph returns
+survives that unchanged (nested lookup objects, arrays, numbers as `float64`, explicit `null`) has not
+been tested. **7.3 must test the transform on a list carrying each of those column types**, asserting
+the untouched rows deep-equal before and after, before relying on it.
 
 ### 3.3 Whole-item erasure needs most of this anyway
 
@@ -249,8 +257,10 @@ Row erasure **adds** to that core only:
 
 ### 3.4 Traps specific to lists
 
-- **⚠ One object, many points.** Because of 1.5, an unchanged list is the *same* Kopia object in every
-  point since its last change. A row erasure has to rewrite every point that references it, not only
+- **⚠ One object, many points.** This is not specific to lists: content-addressed storage and
+  base-entry carry-forward mean an unchanged item of *any* type is typically the same Kopia object in
+  many points, and 7.3's core has to handle that for every workload. For lists it follows from 1.5: an
+  unchanged list is the *same* Kopia object in every point since its last change. A row erasure has to rewrite every point that references it, not only
   the one the admin browsed. `DirRewriter` caches replacements by a hash of the whole input entry
   (`dir_rewriter.go:78-91`, `:93-107`), so within one run each distinct list object is transformed once.
   Several points are still several snapshot and details rewrites.
@@ -260,10 +270,19 @@ Row erasure **adds** to that core only:
   Microsoft 365, until the list's `lastModifiedDateTime` moves. That is a backup-correctness defect,
   not an erasure feature (GDPR-5 says erasure *cannot* stop re-capture). The rewrite must give the
   replacement entry a mod time that cannot match, and 7.3's tests must assert the next backup
-  re-fetches the list. Whole-item erasure removes the entry instead, so there is nothing to match and
-  this trap does not arise.
-- **Not everything about a row lives in its row.** A lookup column in *another* list stores the
-  referenced row's `LookupValue` (its title) in that list's rows (`lists.go:392-396`). The list's own
+  re-fetches the list. For a **whole list**, erasure removes the entry instead, and because lists are
+  re-enumerated in full on every backup (`backup.go:176`, `:228-301`) the next backup re-fetches it:
+  nothing to match, so this trap does not arise. **Do not generalise that to other categories.**
+  Delta-based categories (Exchange, OneDrive) carry base-snapshot entries forward into the next
+  snapshot unless the service reported them changed or deleted (`src/internal/kopia/upload.go:556-640`,
+  skip checks at `:625-633`), so how a removed or replaced entry behaves on the next backup is a
+  separate question 7.3 must answer per category.
+- **Not everything about a row lives in its row.** A **multi-value** lookup column in *another* list
+  stores, per referenced row, an object carrying `LookupId` and `LookupValue` (the referenced row's
+  display value) in that list's rows: the fork's restore code expects exactly those keys
+  (`lists.go:394-396`, `checkFields` at `:586-595`, key names at `consts.go:60-61`). For a
+  **single-value** lookup the same comment says the field is fetched as `<name>LookupId` only; whether
+  Graph also returns the display value there is **unverified** (the seeded list has no lookup column). The list's own
   `lastModifiedBy` can name the person who last edited the erased row. Neither is removed by erasing the
   row, under any storage layout. 7.3's erasure report (GDPR-6) should say so rather than imply
   completeness.
@@ -281,8 +300,17 @@ or by name", RES-2). Today nothing outside the encrypted list object names a row
 `ListToSPInfo` already has every row in hand, record `{rowID, Title, created, modified}` per row in
 `ListInfo`, for example a new `Rows` field with `omitempty`. Browse and `FindItemsByName` can then list
 and find rows without decrypting content, which keeps 0.7's guarantee that browse fetches no item
-content. Older points lack the field, so they stay list-granular. Size: **S**. Erasure must also strip
-the erased row's summary from the details (3.3, step 2).
+content. Older points lack the field, so they stay list-granular. Erasure must also strip the erased
+row's summary from the details (3.3, step 2).
+
+Two costs to weigh. First, **large lists**: the summaries are written into *every* point's details
+manifest, because details are per point, not deduplicated per list, so a 50,000-row list adds its row
+summaries to each point and to every browse or `FindItemsByName` read of it; B1 likely wants a size cap
+or paging. Second, **row titles in details become content that erasure must reach**: today a list's
+details entry names only the list, but with B1 an erased row's title sits in the details snapshot of
+every point that captured it. Size: **S–M**, not S: besides the backup-side field it touches
+`pkg/engine`'s browse surface, `src/pkg/engine/README.md` and its embedded docs test, and the
+browse integration assertions.
 
 **B2. Read the list object at browse time.** Browse decrypts one object per list (16 KB here). It
 works on existing points but breaks 0.7's "no item content fetched or decrypted" property, so it is
@@ -377,9 +405,19 @@ Where the live run and the code reading could have disagreed, they agree: rows a
 showed that the code reading had not predicted was that serialisation is non-deterministic (1.6), which
 the kiota source then explained.
 
-**Not verified, and why:** that a row edit always moves the list's `lastModifiedDateTime` (1.5), and that
-row IDs are never reused (1.3). Both need a write to the tenant, which this spike may not make. A
-restore POST of a single row was likewise never sent, only built (2.3).
+**Not verified, and why:**
+
+- that a row edit always moves the list's `lastModifiedDateTime` (1.5);
+- that row IDs are never reused (1.3);
+- that a row's ID is stable across an edit to that row: the run read IDs twice with no edit between
+  (1.3);
+- that a single-row restore POST succeeds: it was built, never sent (2.3);
+- that the erase transform round-trips lookup, person, multi-choice, hyperlink, number and null values
+  (3.2): the seeded list has none of them;
+- that a single-value lookup stores no display value (3.4).
+
+The first four need a write to the tenant, which this spike may not make; the last two need a list with
+those column types, which the seeded list does not have and this spike may not create.
 
 ## 6. Recommendation and sizes
 
@@ -389,7 +427,7 @@ L is several chunks.
 | Option | Restore (5.1) | Erasure (7.3) | Storage change | Size beyond list-granular |
 | --- | --- | --- | --- | --- |
 | **A. List-granular (as decided)** | Whole list. Still needs the ⚠ guardrails below. | Whole list = drop one entry, same as any item | None | 0 |
-| **B. Derive rows from the stored item** | B1 details row summaries **S** + row-subset restore into original list **M** | B1 **S** (shared) + row transform on 7.3's core **S–M** | None (details field addition only) | ≈ S + M + S–M |
+| **B. Derive rows from the stored item** | B1 details row summaries **S–M** + row-subset restore into original list **M** | B1 **S–M** (shared) + row transform on 7.3's core **S–M** | None (details field addition only) | ≈ S–M + M + S–M |
 | **C. Rows as items** | Same live-list work as B, plus layout reassembly | Drop row entry, no transform | Yes, new layout + version bump + permanent dual-layout restore | **L–XL** |
 
 **Recommendation.** Do not change the storage format: reject C for v1. Its cost lands in backup,
@@ -404,7 +442,7 @@ row-level restore or erasure is wanted, B delivers both without a migration. In 
 - **Brief 7.3's rewrite core with a per-entry transform hook**, not only "drop entry". Require it to
   rewrite **every** point sharing the object (3.4), to give a replaced entry a mod time that cannot
   match the cache (3.4), to update the backup model's `SnapshotID` and keep the snapshot's tags (3.3),
-  and to state in the GDPR-6 report what row erasure cannot reach (lookup copies in other lists).
-- **If row-level is brought into v1:** add B1 as a small engine chunk ahead of 5.x's browse UI and
+  to test the row transform on a list with lookup, person, multi-choice, hyperlink, number and null values (3.2), and to state in the GDPR-6 report what row erasure cannot reach (multi-value lookup copies in other lists).
+- **If row-level is brought into v1:** add B1 as a small-to-medium engine chunk ahead of 5.x's browse UI and
   7.3, then row-subset restore as an engine chunk alongside 5.1, then the row transform inside 7.3.
   Points taken before B1 stay list-granular unless option B2 is accepted for them.
